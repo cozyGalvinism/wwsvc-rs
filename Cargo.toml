@@ -5,6 +5,7 @@ edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
 description = "A web client which is used to consume SoftENGINE's WEBSERVICES, a proprietary API for their software WEBWARE."
+repository = "https://github.com/cozyGalvinism/wwsvc-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
