@@ -12,4 +12,8 @@ extern crate serde;
 #[macro_use]
 extern crate serde_json;
 
+#[cfg(feature = "default")]
 pub mod client;
+
+#[cfg(feature = "async")]
+pub mod async_client;
