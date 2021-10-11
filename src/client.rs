@@ -6,6 +6,8 @@ use std::collections::{HashMap};
 use httpdate::fmt_http_date;
 use encoding_rs::WINDOWS_1252;
 
+use crate::cursor::Cursor;
+
 /// Represents a request hash object, used for securing requests
 pub struct AppHash {
     /// The used request ID
@@ -39,16 +41,19 @@ pub struct WebwareClient {
     /// Service pass of the client, only populated after `register()` is ran
     pub service_pass: Option<String>,
     /// Internal reqwest client
-    pub client: reqwest::blocking::Client
+    pub client: reqwest::blocking::Client,
+    /// Request cursor for pagination,
+    pub cursor: Option<Cursor>,
 }
 
 impl WebwareClient {
     /// Returns a new webservice client, that can be used to consume SoftENGINE's WEBSERVICES
     ///
     /// You can allow access to insecure instances by setting `allow_unsafe_certs` to `true`.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(vendor_hash: String, app_hash: String, secret: String, revision: u32, host: String, port: u16, wwsvc_path: String, allow_unsafe_certs: bool) -> Self {
         let ww_url = format!("https://{}:{}{}", host, port, wwsvc_path);
-        return Self {
+        Self {
             webservice_path: wwsvc_path,
             webware_url: ww_url,
             vendor_hash,
@@ -62,17 +67,24 @@ impl WebwareClient {
             client: reqwest::blocking::Client::builder()
                 .danger_accept_invalid_certs(allow_unsafe_certs)
                 .build()
-                .unwrap()
-        };
+                .unwrap(),
+            cursor: None,
+        }
+    }
+
+    /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
+    pub fn create_cursor(&mut self, max_lines: u32) {
+        self.cursor = Some(Cursor::new(max_lines));
     }
 
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
     pub fn get_default_headers(&mut self) -> HeaderMap {
+        let mut max_lines = self.result_max_lines;
+
         let mut header_vec = vec![
             ("WWSVC-EXECUTE-MODE", "SYNCHRON".to_string()),
-            ("WWSVC-ACCEPT-RESULT-MAX-LINES", format!("{}", self.result_max_lines)),
             ("WWSVC-ACCEPT-RESULT-TYPE", "JSON".to_string())
         ];
         
@@ -82,16 +94,27 @@ impl WebwareClient {
             self.current_request = app_hash.request_id;
             header_vec.append(&mut vec![
                 ("WWSVC-REQID", format!("{}", self.current_request)),
-                ("WWSVC-TS",  format!("{}", app_hash.date_formatted)),
+                ("WWSVC-TS",  app_hash.date_formatted.to_string()),
                 ("WWSVC-HASH", format!("{:x}", app_hash))
             ]);
+
+            if let Some(cursor) = &self.cursor {
+                if !cursor.closed() {
+                    header_vec.append(&mut vec![
+                        ("WWSVC-CURSOR", cursor.cursor_id.to_string())
+                    ]);
+                    max_lines = cursor.max_lines;
+                }
+            }
         }
+
+        header_vec.push(("WWSVC-ACCEPT-RESULT-MAX-LINES", format!("{}", max_lines)));
+
         let headers: HashMap<String, String> = header_vec.iter()
             .map(|(s1, s2)|(s1.to_string(), s2.to_string()))
             .collect();
 
-        let header_map = (&headers).try_into().expect("valid headers");
-        return header_map;
+        (&headers).try_into().expect("invalid headers")
     }
 
     /// Returns the same set of headers, that `get_default_headers()` returns, except the result type header is set to `BIN` instead.
@@ -99,7 +122,7 @@ impl WebwareClient {
         let mut headers = self.get_default_headers();
         headers.remove("WWSVC-ACCEPT-RESULT-TYPE");
         headers.append("WWSVC-ACCEPT-RESULT-TYPE", HeaderValue::from_str("BIN").expect("valid header"));
-        return headers;
+        headers
     }
 
     /// Builds a valid WEBSERVICES URL from URL parts
@@ -124,7 +147,7 @@ impl WebwareClient {
         self.service_pass = Some(service_pass["PASSID"].as_str().unwrap().to_string());
         self.app_id = Some(service_pass["APPID"].as_str().unwrap().to_string());
 
-        return Ok(true);
+        Ok(true)
     }
 
     /// Sends a `DEREGISTER` request to the WEBWARE instance, in order to invalidate the service pass.
@@ -139,12 +162,12 @@ impl WebwareClient {
         let _ = self.client.get(target_url).headers(headers).send();
         self.service_pass = None;
         self.app_id = None;
-        return true;
+        true
     }
 
     /// Performs a request to the WEBSERVICES and returns a JSON value.
     pub fn request(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        return self.request_generic::<serde_json::Value>(method, function, version, parameters);
+        self.request_generic::<serde_json::Value>(method, function, version, parameters)
     }
 
     /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
@@ -186,8 +209,15 @@ impl WebwareClient {
             .headers(headers)
             .json(&body)
             .send()?;
+        
+        if let Some(cursor) = &mut self.cursor {
+            if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
+                cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
+            }
+        }
+
         let response_obj = response.json::<T>()?;
-        return Ok(response_obj);
+        Ok(response_obj)
     }
 }
 
@@ -201,11 +231,11 @@ impl AppHash {
         let combined = format!("{}{}", app_secret, now);
         let (cow, _encoding_used, _had_errors) = WINDOWS_1252.encode(&combined[..]);
         let md5_hash = format!("{:x}", md5::compute(cow));
-        return AppHash {
+        AppHash {
             request_id: new_request_id,
             hash: md5_hash,
             date_formatted: now
-        };
+        }
     }
 }
 

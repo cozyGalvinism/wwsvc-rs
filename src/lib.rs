@@ -12,8 +12,14 @@ extern crate serde;
 #[macro_use]
 extern crate serde_json;
 
+pub mod cursor;
+
 #[cfg(feature = "default")]
 pub mod client;
+#[cfg(feature = "default")]
+pub use client::{WebwareClient, AppHash};
 
 #[cfg(feature = "async")]
 pub mod async_client;
+#[cfg(feature = "async")]
+pub use async_client as _async;
