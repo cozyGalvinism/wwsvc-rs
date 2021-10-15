@@ -14,6 +14,7 @@ extern crate serde_json;
 
 pub mod cursor;
 
+pub use reqwest::Method;
 #[cfg(feature = "default")]
 pub mod client;
 #[cfg(feature = "default")]
