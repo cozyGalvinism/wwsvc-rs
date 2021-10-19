@@ -1,3 +1,4 @@
+use reqwest::Response;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::de::DeserializeOwned;
 use std::convert::{TryInto};
@@ -170,13 +171,8 @@ impl WebwareClient {
         return self.request_generic::<serde_json::Value>(method, function, version, parameters).await;
     }
 
-    /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
-    ///
-    /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
-    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<T, Box<dyn std::error::Error>> 
-    where
-        T:DeserializeOwned
-    {
+    /// Performs a request to the WEBSERVICES and returns a response object.
+    pub async fn request_as_response(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<Response, Box<dyn std::error::Error>> {
         let target_url = self.build_url(vec!["EXECJSON".to_string()]);
         let headers = self.get_default_headers();
         let mut param_vec: Vec<HashMap<String, String>> = Vec::new();
@@ -215,7 +211,18 @@ impl WebwareClient {
                 cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
             }
         }
+        
+        Ok(response)
+    }
 
+    /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
+    ///
+    /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
+    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<T, Box<dyn std::error::Error>> 
+    where
+        T:DeserializeOwned
+    {
+        let response = self.request_as_response(method, function, version, parameters).await?;
         let response_obj = response.json::<T>().await?;
         Ok(response_obj)
     }

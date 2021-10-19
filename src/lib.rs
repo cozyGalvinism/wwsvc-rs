@@ -15,12 +15,17 @@ extern crate serde_json;
 pub mod cursor;
 
 pub use reqwest::Method;
+pub use serde_json::Value;
 #[cfg(feature = "default")]
 pub mod client;
 #[cfg(feature = "default")]
 pub use client::{WebwareClient, AppHash};
+#[cfg(feature = "default")]
+pub use reqwest::blocking::Response;
 
 #[cfg(feature = "async")]
 pub mod async_client;
 #[cfg(feature = "async")]
 pub use async_client as _async;
+#[cfg(feature = "async")]
+pub use reqwest::Response as AsyncResponse;
