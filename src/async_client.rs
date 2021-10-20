@@ -19,69 +19,202 @@ pub struct AppHash {
     pub date_formatted: String
 }
 
-/// The web client to consume SoftENGINE's WEBSERVICES
-pub struct WebwareClient {
-    /// Full URL to the WEBWARE instance
-    pub webware_url: String,
+/// A builder for constructing a WEBWARE client
+pub struct WebwareClientBuilder {
+    /// Host of the WEBWARE server
+    host: String,
+    /// Port of the WEBWARE server
+    port: u16,
     /// Path to the WEBSERVICES endpoint, relative to the full URL
-    pub webservice_path: String,
+    webservice_path: String,
     /// Vendor hash of the application
-    pub vendor_hash: String,
+    vendor_hash: String,
     /// Application hash of the application
-    pub app_hash: String,
+    app_hash: String,
     /// Application secret, assigned by the WEBWARE instance
-    pub secret: String,
+    secret: String,
     /// Revision of the application
-    pub revision: u32,
-    /// Application ID for the service pass, only populated after `register()` is ran
-    pub app_id: Option<String>,
-    /// Current request ID
-    pub current_request: u32,
+    revision: u32,
+    /// Allow unsafe certificates
+    /// (only use this if you know what you are doing)
+    /// (default: false)
+    allow_unsafe_certs: bool,
+    /// The timeout for the request in seconds
+    /// (default: 60)
+    timeout: u64,
     /// Maximum amount of objects that are returned in a request
-    pub result_max_lines: u32,
-    /// Service pass of the client, only populated after `register()` is ran
-    pub service_pass: Option<String>,
-    /// Internal reqwest client
-    pub client: reqwest::Client,
-    /// Request cursor for pagination,
-    pub cursor: Option<Cursor>,
+    result_max_lines: u32,
 }
 
-impl WebwareClient {
-    /// Returns a new webservice client, that can be used to consume SoftENGINE's WEBSERVICES
-    ///
-    /// You can allow access to insecure instances by setting `allow_unsafe_certs` to `true`.
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(vendor_hash: String, app_hash: String, secret: String, revision: u32, host: String, port: u16, wwsvc_path: String, allow_unsafe_certs: bool) -> Self {
-        let ww_url = format!("https://{}:{}{}", host, port, wwsvc_path);
-        Self {
-            webservice_path: wwsvc_path,
-            webware_url: ww_url,
-            vendor_hash,
-            app_hash,
-            secret,
-            revision,
-            app_id: None,
-            current_request: 0,
-            result_max_lines: 100000,
-            service_pass: None,
-            client: reqwest::Client::builder()
-                .danger_accept_invalid_certs(allow_unsafe_certs)
-                .build()
-                .unwrap(),
-            cursor: None,
+impl Default for WebwareClientBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl WebwareClientBuilder {
+    /// Creates a new instance of the builder
+    pub fn new() -> Self {
+        WebwareClientBuilder {
+            host: String::new(),
+            port: 443,
+            webservice_path: "/WWSVC/".to_string(),
+            vendor_hash: String::new(),
+            app_hash: String::new(),
+            secret: String::new(),
+            revision: 0,
+            allow_unsafe_certs: false,
+            timeout: 60,
+            result_max_lines: 1000,
         }
     }
 
+    /// Sets the host of the WEBWARE server
+    /// 
+    /// Don't include the protocol (http:// or https://)!
+    /// 
+    /// (default: "")
+    pub fn host(&mut self, host: &str) -> &mut Self {
+        self.host = host.to_string();
+        self
+    }
+
+    /// Sets the port of the WEBWARE server
+    /// 
+    /// (default: 443)
+    pub fn port(&mut self, port: u16) -> &mut Self {
+        self.port = port;
+        self
+    }
+
+
+    /// Sets the path to the WEBSERVICES endpoint, relative to the full URL
+    /// 
+    /// (default: "/WWSVC/")
+    pub fn webservice_path(&mut self, path: &str) -> &mut Self {
+        self.webservice_path = path.to_string();
+        self
+    }
+
+    /// Sets the vendor hash of the application
+    /// 
+    /// (default: "")
+    pub fn vendor_hash(&mut self, hash: &str) -> &mut Self {
+        self.vendor_hash = hash.to_string();
+        self
+    }
+
+    /// Sets the application hash of the application
+    /// 
+    /// (default: "")
+    pub fn app_hash(&mut self, hash: &str) -> &mut Self {
+        self.app_hash = hash.to_string();
+        self
+    }
+
+    /// Sets the application secret, assigned by the WEBWARE instance
+    /// 
+    /// (default: "")
+    pub fn secret(&mut self, secret: &str) -> &mut Self {
+        self.secret = secret.to_string();
+        self
+    }
+
+    /// Sets the revision of the application
+    /// 
+    /// (default: 0)
+    pub fn revision(&mut self, revision: u32) -> &mut Self {
+        self.revision = revision;
+        self
+    }
+
+    /// Sets whether to allow unsafe certificates
+    /// 
+    /// (default: false)
+    pub fn allow_unsafe_certs(&mut self, allow: bool) -> &mut Self {
+        self.allow_unsafe_certs = allow;
+        self
+    }
+
+    /// Sets the timeout for the request in seconds
+    /// 
+    /// (default: 60)
+    pub fn timeout(&mut self, timeout: u64) -> &mut Self {
+        self.timeout = timeout;
+        self
+    }
+
+    /// Sets the maximum amount of objects that are returned in a response
+    /// 
+    /// (default: 1000)
+    pub fn result_max_lines(&mut self, lines: u32) -> &mut Self {
+        self.result_max_lines = lines;
+        self
+    }
+
+    /// Builds the client
+    pub fn build(&self) -> WebwareClient {
+        WebwareClient {
+            webware_url: format!("https://{}:{}{}", self.host, self.port, self.webservice_path),
+            vendor_hash: self.vendor_hash.clone(),
+            app_hash: self.app_hash.clone(),
+            secret: self.secret.clone(),
+            revision: self.revision,
+            result_max_lines: self.result_max_lines,
+            app_id: None,
+            current_request: 0,
+            service_pass: None,
+            cursor: None,
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(self.timeout))
+                .danger_accept_invalid_certs(self.allow_unsafe_certs)
+                .build()
+                .unwrap(),
+        }
+    }
+}
+
+/// The web client to consume SoftENGINE's WEBSERVICES
+pub struct WebwareClient {
+    /// Full URL to the WEBWARE instance
+    webware_url: String,
+    /// Vendor hash of the application
+    vendor_hash: String,
+    /// Application hash of the application
+    app_hash: String,
+    /// Application secret, assigned by the WEBWARE instance
+    secret: String,
+    /// Revision of the application
+    revision: u32,
+    /// Application ID for the service pass, only populated after `register()` is ran
+    app_id: Option<String>,
+    /// Current request ID
+    current_request: u32,
+    /// Maximum amount of objects that are returned in a request
+    result_max_lines: u32,
+    /// Service pass of the client, only populated after `register()` is ran
+    service_pass: Option<String>,
+    /// Internal reqwest client
+    client: reqwest::Client,
+    /// Request cursor for pagination,
+    cursor: Option<Cursor>,
+}
+
+impl WebwareClient {
     /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
     pub fn create_cursor(&mut self, max_lines: u32) {
         self.cursor = Some(Cursor::new(max_lines));
     }
 
+    /// Sets the maximum amount of results that are returned in a response
+    pub fn set_result_max_lines(&mut self, max_lines: u32) {
+        self.result_max_lines = max_lines;
+    }
+
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
-    pub fn get_default_headers(&mut self) -> HeaderMap {
+    pub fn get_default_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> HeaderMap {
         let mut max_lines = self.result_max_lines;
 
         let mut header_vec = vec![
@@ -111,16 +244,22 @@ impl WebwareClient {
 
         header_vec.push(("WWSVC-ACCEPT-RESULT-MAX-LINES", format!("{}", max_lines)));
 
-        let headers: HashMap<String, String> = header_vec.iter()
+        let mut headers: HashMap<String, String> = header_vec.iter()
             .map(|(s1, s2)|(s1.to_string(), s2.to_string()))
             .collect();
+        
+        if let Some(additional_headers) = additional_headers {
+            for (key, value) in additional_headers {
+                headers.insert(key.to_string(), value.to_string());
+            }
+        }
 
         (&headers).try_into().expect("invalid headers")
     }
 
     /// Returns the same set of headers, that `get_default_headers()` returns, except the result type header is set to `BIN` instead.
-    pub fn get_bin_headers(&mut self) -> HeaderMap {
-        let mut headers = self.get_default_headers();
+    pub fn get_bin_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> HeaderMap {
+        let mut headers = self.get_default_headers(additional_headers);
         headers.remove("WWSVC-ACCEPT-RESULT-TYPE");
         headers.append("WWSVC-ACCEPT-RESULT-TYPE", HeaderValue::from_str("BIN").expect("valid header"));
         headers
@@ -159,7 +298,7 @@ impl WebwareClient {
             return true;
         }
         let target_url = self.build_url(vec!["WWSERVICE".to_string(), "DEREGISTER".to_string(), self.service_pass.clone().unwrap()]);
-        let headers = self.get_default_headers();
+        let headers = self.get_default_headers(None);
         let _ = self.client.get(target_url).headers(headers).send().await;
         self.service_pass = None;
         self.app_id = None;
@@ -167,14 +306,14 @@ impl WebwareClient {
     }
 
     /// Performs a request to the WEBSERVICES and returns a JSON value.
-    pub async fn request(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        return self.request_generic::<serde_json::Value>(method, function, version, parameters).await;
+    pub async fn request(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        return self.request_generic::<serde_json::Value>(method, function, version, parameters, additional_headers).await;
     }
 
     /// Performs a request to the WEBSERVICES and returns a response object.
-    pub async fn request_as_response(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<Response, Box<dyn std::error::Error>> {
+    pub async fn request_as_response(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<Response, Box<dyn std::error::Error>> {
         let target_url = self.build_url(vec!["EXECJSON".to_string()]);
-        let headers = self.get_default_headers();
+        let headers = self.get_default_headers(additional_headers);
         let mut param_vec: Vec<HashMap<String, String>> = Vec::new();
         let app_hash_header = headers.get("WWSVC-HASH");
         let timestamp_header = headers.get("WWSVC-TS");
@@ -183,8 +322,8 @@ impl WebwareClient {
 
         for (p_key, p_value) in parameters {
             let mut map: HashMap<String, String> = HashMap::new();
-            map.insert("PNAME".to_string(), p_key);
-            map.insert("PCONTENT".to_string(), p_value);
+            map.insert("PNAME".to_string(), p_key.to_string());
+            map.insert("PCONTENT".to_string(), p_value.to_string());
             param_vec.push(map);
         }
         let body = json!({
@@ -218,11 +357,11 @@ impl WebwareClient {
     /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
     ///
     /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
-    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: String, version: u32, parameters: HashMap<String, String>) -> Result<T, Box<dyn std::error::Error>> 
+    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<T, Box<dyn std::error::Error>> 
     where
         T:DeserializeOwned
     {
-        let response = self.request_as_response(method, function, version, parameters).await?;
+        let response = self.request_as_response(method, function, version, parameters, additional_headers).await?;
         let response_obj = response.json::<T>().await?;
         Ok(response_obj)
     }

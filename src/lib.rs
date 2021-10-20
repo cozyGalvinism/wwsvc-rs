@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 #![crate_name = "wwsvc_rs"]
 
 //! # WEBSERVICES Client
@@ -12,11 +13,14 @@ extern crate serde;
 #[macro_use]
 extern crate serde_json;
 
+/// Module containing the pagination cursor.
 pub mod cursor;
 
 pub use reqwest::Method;
 pub use serde_json::Value;
+pub use cursor::Cursor;
 #[cfg(feature = "default")]
+/// Module containing the default client.
 pub mod client;
 #[cfg(feature = "default")]
 pub use client::{WebwareClient, AppHash};
@@ -24,6 +28,7 @@ pub use client::{WebwareClient, AppHash};
 pub use reqwest::blocking::Response;
 
 #[cfg(feature = "async")]
+/// Module containing the async client.
 pub mod async_client;
 #[cfg(feature = "async")]
 pub use async_client as _async;
