@@ -1,6 +1,6 @@
 [package]
 name = "wwsvc-rs"
-version = "1.0.0"
+version = "1.1.0"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
@@ -11,7 +11,7 @@ repository = "https://github.com/cozyGalvinism/wwsvc-rs"
 
 [features]
 default = ["reqwest/blocking"]
-async = ["tokio"]
+async = ["tokio/full"]
 
 [dependencies]
 reqwest = { version = "0.11", features = ["json", "gzip", "deflate"] }
@@ -20,4 +20,4 @@ httpdate = "1.0"
 md5 = "0.7"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1", features = ["full"], optional = true }
+tokio = { version = "1", optional = true }

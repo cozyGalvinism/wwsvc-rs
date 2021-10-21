@@ -15,15 +15,18 @@ extern crate serde_json;
 
 /// Module containing the pagination cursor.
 pub mod cursor;
+/// Module containing the app hash, which is needed for each request.
+pub mod app_hash;
 
 pub use reqwest::Method;
 pub use serde_json::Value;
 pub use cursor::Cursor;
+pub use app_hash::AppHash;
 #[cfg(feature = "default")]
 /// Module containing the default client.
 pub mod client;
 #[cfg(feature = "default")]
-pub use client::{WebwareClient, AppHash};
+pub use client::WebwareClient;
 #[cfg(feature = "default")]
 pub use reqwest::blocking::Response;
 
@@ -31,6 +34,6 @@ pub use reqwest::blocking::Response;
 /// Module containing the async client.
 pub mod async_client;
 #[cfg(feature = "async")]
-pub use async_client as _async;
+pub use async_client::WebwareClient as AsyncWebwareClient;
 #[cfg(feature = "async")]
 pub use reqwest::Response as AsyncResponse;
