@@ -5,6 +5,7 @@
 /// 
 /// Once you send a request containing the cursor, the WEBWARE server returns a new cursor ID.
 /// If there are no more results, the cursor ID will be "CLOSED".
+#[derive(Clone)]
 pub struct Cursor {
     /// The cursor ID.
     /// 

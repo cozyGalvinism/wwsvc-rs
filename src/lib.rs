@@ -22,18 +22,8 @@ pub use reqwest::Method;
 pub use serde_json::Value;
 pub use cursor::Cursor;
 pub use app_hash::AppHash;
-#[cfg(feature = "default")]
-/// Module containing the default client.
-pub mod client;
-#[cfg(feature = "default")]
-pub use client::WebwareClient;
-#[cfg(feature = "default")]
-pub use reqwest::blocking::Response;
 
-#[cfg(feature = "async")]
-/// Module containing the async client.
-pub mod async_client;
-#[cfg(feature = "async")]
-pub use async_client::WebwareClient as AsyncWebwareClient;
-#[cfg(feature = "async")]
-pub use reqwest::Response as AsyncResponse;
+/// Module containing the client.
+pub mod client;
+pub use client::WebwareClient;
+pub use reqwest::Response;

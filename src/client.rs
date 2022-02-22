@@ -1,8 +1,9 @@
-use reqwest::blocking::Response;
+use reqwest::Response;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::de::DeserializeOwned;
 use std::convert::{TryInto};
 use std::collections::{HashMap};
+use std::future::Future;
 
 use crate::Cursor;
 use crate::AppHash;
@@ -31,7 +32,7 @@ pub struct WebwareClientBuilder {
     /// (default: 60)
     timeout: u64,
     /// Maximum amount of objects that are returned in a request
-    pub result_max_lines: u32,
+    result_max_lines: u32,
 }
 
 impl Default for WebwareClientBuilder {
@@ -62,8 +63,11 @@ impl WebwareClientBuilder {
     /// Don't include the protocol (http:// or https://)!
     /// 
     /// (default: "")
-    pub fn host(&mut self, host: &str) -> &mut Self {
-        self.host = host.to_string();
+    pub fn host<S>(&mut self, host: S) -> &mut Self
+    where
+        S: AsRef<str>
+    {
+        self.host = host.as_ref().to_string();
         self
     }
 
@@ -79,32 +83,44 @@ impl WebwareClientBuilder {
     /// Sets the path to the WEBSERVICES endpoint, relative to the full URL
     /// 
     /// (default: "/WWSVC/")
-    pub fn webservice_path(&mut self, path: &str) -> &mut Self {
-        self.webservice_path = path.to_string();
+    pub fn webservice_path<S>(&mut self, path: S) -> &mut Self 
+    where
+        S: AsRef<str>
+    {
+        self.webservice_path = path.as_ref().to_string();
         self
     }
 
     /// Sets the vendor hash of the application
     /// 
     /// (default: "")
-    pub fn vendor_hash(&mut self, hash: &str) -> &mut Self {
-        self.vendor_hash = hash.to_string();
+    pub fn vendor_hash<S>(&mut self, hash: S) -> &mut Self 
+    where
+        S: AsRef<str>
+    {
+        self.vendor_hash = hash.as_ref().to_string();
         self
     }
 
     /// Sets the application hash of the application
     /// 
     /// (default: "")
-    pub fn app_hash(&mut self, hash: &str) -> &mut Self {
-        self.app_hash = hash.to_string();
+    pub fn app_hash<S>(&mut self, hash: S) -> &mut Self 
+    where
+        S: AsRef<str>
+    {
+        self.app_hash = hash.as_ref().to_string();
         self
     }
 
     /// Sets the application secret, assigned by the WEBWARE instance
     /// 
     /// (default: "")
-    pub fn secret(&mut self, secret: &str) -> &mut Self {
-        self.secret = secret.to_string();
+    pub fn secret<S>(&mut self, secret: S) -> &mut Self 
+    where
+        S: AsRef<str>
+    {
+        self.secret = secret.as_ref().to_string();
         self
     }
 
@@ -153,7 +169,7 @@ impl WebwareClientBuilder {
             current_request: 0,
             service_pass: None,
             cursor: None,
-            client: reqwest::blocking::Client::builder()
+            client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(self.timeout))
                 .danger_accept_invalid_certs(self.allow_unsafe_certs)
                 .build()
@@ -183,7 +199,7 @@ pub struct WebwareClient {
     /// Service pass of the client, only populated after `register()` is ran
     service_pass: Option<String>,
     /// Internal reqwest client
-    client: reqwest::blocking::Client,
+    client: reqwest::Client,
     /// Request cursor for pagination,
     cursor: Option<Cursor>,
 }
@@ -194,6 +210,17 @@ impl WebwareClient {
         self.cursor = Some(Cursor::new(max_lines));
     }
 
+    /// Returns whether the current cursor is closed.
+    /// 
+    /// Returns true if there is no cursor.
+    pub fn cursor_closed(&self) -> bool {
+        if let Some(c) = self.cursor.as_ref() {
+            c.closed()
+        } else {
+            true
+        }
+    }
+
     /// Sets the maximum amount of results that are returned in a response
     pub fn set_result_max_lines(&mut self, max_lines: u32) {
         self.result_max_lines = max_lines;
@@ -202,7 +229,11 @@ impl WebwareClient {
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
-    pub fn get_default_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> HeaderMap {
+    pub fn get_default_headers<SK, SV>(&mut self, additional_headers: Option<HashMap<SK, SV>>) -> HeaderMap 
+    where
+        SK: AsRef<str>,
+        SV: AsRef<str>
+    {
         let mut max_lines = self.result_max_lines;
 
         let mut header_vec = vec![
@@ -235,10 +266,10 @@ impl WebwareClient {
         let mut headers: HashMap<String, String> = header_vec.iter()
             .map(|(s1, s2)|(s1.to_string(), s2.to_string()))
             .collect();
-
+        
         if let Some(additional_headers) = additional_headers {
             for (key, value) in additional_headers {
-                headers.insert(key.to_string(), value.to_string());
+                headers.insert(key.as_ref().to_string(), value.as_ref().to_string());
             }
         }
 
@@ -262,10 +293,10 @@ impl WebwareClient {
     /// Sends a `REGISTER` request to the WEBWARE instance and returns whether the request succeeded or not.
     ///
     /// If the result is not `true`, the client has no valid service pass and cannot perform requests!
-    pub fn register(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
+    pub async fn register(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
         let target_url = self.build_url(vec!["WWSERVICE".to_string(), "REGISTER".to_string(), self.vendor_hash.clone(), self.app_hash.clone(), self.secret.clone(), self.revision.clone().to_string()]);
-        let response = self.client.get(target_url).send()?;
-        let response_obj = response.json::<HashMap<String, serde_json::Value>>()?;
+        let response = self.client.get(target_url).send().await?;
+        let response_obj = response.json::<HashMap<String, serde_json::Value>>().await?;
 
         if !response_obj.contains_key("SERVICEPASS") {
             return Ok(false);
@@ -281,25 +312,26 @@ impl WebwareClient {
     /// Sends a `DEREGISTER` request to the WEBWARE instance, in order to invalidate the service pass.
     ///
     /// If the client was not authenticated using `register()` before, it will instead just return true;
-    pub fn deregister(&mut self) -> bool {
+    pub async fn deregister(&mut self) -> bool {
         if self.service_pass.is_none() {
             return true;
         }
         let target_url = self.build_url(vec!["WWSERVICE".to_string(), "DEREGISTER".to_string(), self.service_pass.clone().unwrap()]);
-        let headers = self.get_default_headers(None);
-        let _ = self.client.get(target_url).headers(headers).send();
+        let headers = self.get_default_headers::<String, String>(None);
+        let _ = self.client.get(target_url).headers(headers).send().await;
+        
         self.service_pass = None;
         self.app_id = None;
         true
     }
 
     /// Performs a request to the WEBSERVICES and returns a JSON value.
-    pub fn request(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-        self.request_generic::<serde_json::Value>(method, function, version, parameters, additional_headers)
+    pub async fn request(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+        return self.request_generic::<serde_json::Value>(method, function, version, parameters, additional_headers).await;
     }
 
     /// Performs a request to the WEBSERVICES and returns a response object.
-    pub fn request_as_response(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<Response, Box<dyn std::error::Error>> {
+    pub async fn request_as_response(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<Response, Box<dyn std::error::Error>> {
         let target_url = self.build_url(vec!["EXECJSON".to_string()]);
         let headers = self.get_default_headers(additional_headers);
         let mut param_vec: Vec<HashMap<String, String>> = Vec::new();
@@ -331,28 +363,26 @@ impl WebwareClient {
         let response = self.client.request(method, target_url)
             .headers(headers)
             .json(&body)
-            .send()?;
+            .send().await?;
         
         if let Some(cursor) = &mut self.cursor {
             if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
                 cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
             }
         }
-
+        
         Ok(response)
     }
 
     /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
-    /// 
-    /// Discards headers from responses to directly deserialize.
     ///
     /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
-    pub fn request_generic<T>(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<T, Box<dyn std::error::Error>> 
+    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> Result<T, Box<dyn std::error::Error>> 
     where
         T:DeserializeOwned
     {
-        let response = self.request_as_response(method, function, version, parameters, additional_headers)?;
-        let response_obj = response.json::<T>()?;
+        let response = self.request_as_response(method, function, version, parameters, additional_headers).await?;
+        let response_obj = response.json::<T>().await?;
         Ok(response_obj)
     }
 }

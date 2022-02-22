@@ -1,6 +1,6 @@
 [package]
 name = "wwsvc-rs"
-version = "1.1.0"
+version = "2.0.0"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
@@ -10,10 +10,6 @@ exclude = [".gitignore", ".vscode"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-default = ["reqwest/blocking"]
-async = ["tokio/full"]
-
 [dependencies]
 reqwest = { version = "0.11", features = ["json", "gzip", "deflate"] }
 encoding_rs = "0.8"
@@ -21,7 +17,6 @@ httpdate = "1.0"
 md5 = "0.7"
 serde = { version = "1.0.126", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true
