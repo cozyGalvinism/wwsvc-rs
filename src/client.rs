@@ -63,11 +63,8 @@ impl WebwareClientBuilder {
     /// Don't include the protocol (http:// or https://)!
     /// 
     /// (default: "")
-    pub fn host<S>(&mut self, host: S) -> &mut Self
-    where
-        S: AsRef<str>
-    {
-        self.host = host.as_ref().to_string();
+    pub fn host(&mut self, host: &str) -> &mut Self {
+        self.host = host.to_string();
         self
     }
 
@@ -83,44 +80,32 @@ impl WebwareClientBuilder {
     /// Sets the path to the WEBSERVICES endpoint, relative to the full URL
     /// 
     /// (default: "/WWSVC/")
-    pub fn webservice_path<S>(&mut self, path: S) -> &mut Self 
-    where
-        S: AsRef<str>
-    {
-        self.webservice_path = path.as_ref().to_string();
+    pub fn webservice_path(&mut self, path: &str) -> &mut Self {
+        self.webservice_path = path.to_string();
         self
     }
 
     /// Sets the vendor hash of the application
     /// 
     /// (default: "")
-    pub fn vendor_hash<S>(&mut self, hash: S) -> &mut Self 
-    where
-        S: AsRef<str>
-    {
-        self.vendor_hash = hash.as_ref().to_string();
+    pub fn vendor_hash(&mut self, hash: &str) -> &mut Self {
+        self.vendor_hash = hash.to_string();
         self
     }
 
     /// Sets the application hash of the application
     /// 
     /// (default: "")
-    pub fn app_hash<S>(&mut self, hash: S) -> &mut Self 
-    where
-        S: AsRef<str>
-    {
-        self.app_hash = hash.as_ref().to_string();
+    pub fn app_hash(&mut self, hash: &str) -> &mut Self {
+        self.app_hash = hash.to_string();
         self
     }
 
     /// Sets the application secret, assigned by the WEBWARE instance
     /// 
     /// (default: "")
-    pub fn secret<S>(&mut self, secret: S) -> &mut Self 
-    where
-        S: AsRef<str>
-    {
-        self.secret = secret.as_ref().to_string();
+    pub fn secret(&mut self, secret: &str) -> &mut Self {
+        self.secret = secret.to_string();
         self
     }
 
@@ -229,11 +214,7 @@ impl WebwareClient {
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
-    pub fn get_default_headers<SK, SV>(&mut self, additional_headers: Option<HashMap<SK, SV>>) -> HeaderMap 
-    where
-        SK: AsRef<str>,
-        SV: AsRef<str>
-    {
+    pub fn get_default_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> HeaderMap {
         let mut max_lines = self.result_max_lines;
 
         let mut header_vec = vec![
@@ -269,7 +250,7 @@ impl WebwareClient {
         
         if let Some(additional_headers) = additional_headers {
             for (key, value) in additional_headers {
-                headers.insert(key.as_ref().to_string(), value.as_ref().to_string());
+                headers.insert(key.to_string(), value.to_string());
             }
         }
 
@@ -317,9 +298,8 @@ impl WebwareClient {
             return true;
         }
         let target_url = self.build_url(vec!["WWSERVICE".to_string(), "DEREGISTER".to_string(), self.service_pass.clone().unwrap()]);
-        let headers = self.get_default_headers::<String, String>(None);
+        let headers = self.get_default_headers(None);
         let _ = self.client.get(target_url).headers(headers).send().await;
-        
         self.service_pass = None;
         self.app_id = None;
         true
