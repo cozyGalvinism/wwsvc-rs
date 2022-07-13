@@ -141,10 +141,33 @@ impl WebwareClientBuilder {
         self
     }
 
+    #[cfg(not(feature = "http"))]
     /// Builds the client
     pub fn build(&self) -> WebwareClient {
         WebwareClient {
             webware_url: format!("https://{}:{}{}", self.host, self.port, self.webservice_path),
+            vendor_hash: self.vendor_hash.clone(),
+            app_hash: self.app_hash.clone(),
+            secret: self.secret.clone(),
+            revision: self.revision,
+            result_max_lines: self.result_max_lines,
+            app_id: None,
+            current_request: 0,
+            service_pass: None,
+            cursor: None,
+            client: reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(self.timeout))
+                .danger_accept_invalid_certs(self.allow_unsafe_certs)
+                .build()
+                .unwrap(),
+        }
+    }
+
+    #[cfg(feature = "http")]
+    /// Builds the client
+    pub fn build(&self) -> WebwareClient {
+        WebwareClient {
+            webware_url: format!("http://{}:{}{}", self.host, self.port, self.webservice_path),
             vendor_hash: self.vendor_hash.clone(),
             app_hash: self.app_hash.clone(),
             secret: self.secret.clone(),
