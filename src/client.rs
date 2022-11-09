@@ -69,7 +69,7 @@ impl WebwareClientBuilder {
     /// Don't include the protocol (http:// or https://)!
     /// 
     /// (default: "")
-    pub fn host(&mut self, host: &str) -> &mut Self {
+    pub fn host(mut self, host: &str) -> Self {
         self.host = host.to_string();
         self
     }
@@ -77,7 +77,7 @@ impl WebwareClientBuilder {
     /// Sets the port of the WEBWARE server
     /// 
     /// (default: 443)
-    pub fn port(&mut self, port: u16) -> &mut Self {
+    pub fn port(mut self, port: u16) -> Self {
         self.port = port;
         self
     }
@@ -86,7 +86,7 @@ impl WebwareClientBuilder {
     /// Sets the path to the WEBSERVICES endpoint, relative to the full URL
     /// 
     /// (default: "/WWSVC/")
-    pub fn webservice_path(&mut self, path: &str) -> &mut Self {
+    pub fn webservice_path(mut self, path: &str) -> Self {
         self.webservice_path = path.to_string();
         self
     }
@@ -94,7 +94,7 @@ impl WebwareClientBuilder {
     /// Sets the vendor hash of the application
     /// 
     /// (default: "")
-    pub fn vendor_hash(&mut self, hash: &str) -> &mut Self {
+    pub fn vendor_hash(mut self, hash: &str) -> Self {
         self.vendor_hash = hash.to_string();
         self
     }
@@ -102,7 +102,7 @@ impl WebwareClientBuilder {
     /// Sets the application hash of the application
     /// 
     /// (default: "")
-    pub fn app_hash(&mut self, hash: &str) -> &mut Self {
+    pub fn app_hash(mut self, hash: &str) -> Self {
         self.app_hash = hash.to_string();
         self
     }
@@ -110,7 +110,7 @@ impl WebwareClientBuilder {
     /// Sets the application secret, assigned by the WEBWARE instance
     /// 
     /// (default: "")
-    pub fn secret(&mut self, secret: &str) -> &mut Self {
+    pub fn secret(mut self, secret: &str) -> Self {
         self.secret = secret.to_string();
         self
     }
@@ -118,7 +118,7 @@ impl WebwareClientBuilder {
     /// Sets the revision of the application
     /// 
     /// (default: 0)
-    pub fn revision(&mut self, revision: u32) -> &mut Self {
+    pub fn revision(mut self, revision: u32) -> Self {
         self.revision = revision;
         self
     }
@@ -126,7 +126,7 @@ impl WebwareClientBuilder {
     /// Sets whether to allow unsafe certificates
     /// 
     /// (default: false)
-    pub fn allow_unsafe_certs(&mut self, allow: bool) -> &mut Self {
+    pub fn allow_unsafe_certs(mut self, allow: bool) -> Self {
         self.allow_unsafe_certs = allow;
         self
     }
@@ -134,7 +134,7 @@ impl WebwareClientBuilder {
     /// Sets the timeout for the request in seconds
     /// 
     /// (default: 60)
-    pub fn timeout(&mut self, timeout: u64) -> &mut Self {
+    pub fn timeout(mut self, timeout: u64) -> Self {
         self.timeout = timeout;
         self
     }
@@ -142,7 +142,7 @@ impl WebwareClientBuilder {
     /// Sets the maximum amount of objects that are returned in a response
     /// 
     /// (default: 1000)
-    pub fn result_max_lines(&mut self, lines: u32) -> &mut Self {
+    pub fn result_max_lines(mut self, lines: u32) -> Self {
         self.result_max_lines = lines;
         self
     }
@@ -150,7 +150,7 @@ impl WebwareClientBuilder {
     /// Sets the service pass for the application
     /// 
     /// (default: None)
-    pub fn service_pass(&mut self, pass: &str) -> &mut Self {
+    pub fn service_pass(mut self, pass: &str) -> Self {
         self.service_pass = Some(pass.to_string());
 
         self
@@ -159,7 +159,7 @@ impl WebwareClientBuilder {
     /// Sets the application ID required for the application
     /// 
     /// (default: None)
-    pub fn app_id(&mut self, id: &str) -> &mut Self {
+    pub fn app_id(mut self, id: &str) -> Self {
         self.app_id = Some(id.to_string());
 
         self
