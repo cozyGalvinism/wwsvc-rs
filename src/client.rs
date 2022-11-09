@@ -33,6 +33,10 @@ pub struct WebwareClientBuilder {
     timeout: u64,
     /// Maximum amount of objects that are returned in a request
     result_max_lines: u32,
+    /// Service pass for the application
+    service_pass: Option<String>,
+    /// Application ID required for the application
+    app_id: Option<String>,
 }
 
 impl Default for WebwareClientBuilder {
@@ -55,6 +59,8 @@ impl WebwareClientBuilder {
             allow_unsafe_certs: false,
             timeout: 60,
             result_max_lines: 1000,
+            service_pass: None,
+            app_id: None,
         }
     }
 
@@ -141,18 +147,36 @@ impl WebwareClientBuilder {
         self
     }
 
+    /// Sets the service pass for the application
+    /// 
+    /// (default: None)
+    pub fn service_pass(&mut self, pass: &str) -> &mut Self {
+        self.service_pass = Some(pass.to_string());
+
+        self
+    }
+
+    /// Sets the application ID required for the application
+    /// 
+    /// (default: None)
+    pub fn app_id(&mut self, id: &str) -> &mut Self {
+        self.app_id = Some(id.to_string());
+
+        self
+    }
+
     /// Builds the client
-    pub fn build(&self) -> WebwareClient {
+    pub fn build(self) -> WebwareClient {
         WebwareClient {
             webware_url: format!("https://{}:{}{}", self.host, self.port, self.webservice_path),
-            vendor_hash: self.vendor_hash.clone(),
-            app_hash: self.app_hash.clone(),
-            secret: self.secret.clone(),
+            vendor_hash: self.vendor_hash,
+            app_hash: self.app_hash,
+            secret: self.secret,
             revision: self.revision,
             result_max_lines: self.result_max_lines,
-            app_id: None,
+            app_id: self.app_id,
             current_request: 0,
-            service_pass: None,
+            service_pass: self.service_pass,
             cursor: None,
             client: reqwest::Client::builder()
                 .timeout(std::time::Duration::from_secs(self.timeout))
@@ -190,6 +214,11 @@ pub struct WebwareClient {
 }
 
 impl WebwareClient {
+    /// Creates a new builder for the client
+    pub fn builder() -> WebwareClientBuilder {
+        WebwareClientBuilder::new()
+    }
+
     /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
     pub fn create_cursor(&mut self, max_lines: u32) {
         self.cursor = Some(Cursor::new(max_lines));
