@@ -17,6 +17,7 @@ extern crate serde_json;
 pub mod cursor;
 /// Module containing the app hash, which is needed for each request.
 pub mod app_hash;
+mod credentials;
 
 pub use reqwest::Method;
 pub use serde_json::Value;
@@ -27,3 +28,4 @@ pub use app_hash::AppHash;
 pub mod client;
 pub use client::WebwareClient;
 pub use reqwest::Response;
+pub use credentials::Credentials;

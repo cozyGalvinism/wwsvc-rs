@@ -3,9 +3,8 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use serde::de::DeserializeOwned;
 use std::convert::{TryInto};
 use std::collections::{HashMap};
-use std::future::Future;
 
-use crate::Cursor;
+use crate::{Cursor, Credentials};
 use crate::AppHash;
 
 /// A builder for constructing a WEBWARE client
@@ -161,6 +160,18 @@ impl WebwareClientBuilder {
     /// (default: None)
     pub fn app_id(mut self, id: &str) -> Self {
         self.app_id = Some(id.to_string());
+
+        self
+    }
+
+    /// Sets the credentials for the application
+    /// 
+    /// This will fill both `app_id` and `service_pass`.
+    /// 
+    /// (default: None)
+    pub fn credentials(mut self, credentials: Credentials) -> Self {
+        self.app_id = Some(credentials.app_id);
+        self.service_pass = Some(credentials.service_pass);
 
         self
     }
@@ -393,5 +404,13 @@ impl WebwareClient {
         let response = self.request_as_response(method, function, version, parameters, additional_headers).await?;
         let response_obj = response.json::<T>().await?;
         Ok(response_obj)
+    }
+
+    /// Generates a set of credentials from the current client.
+    pub fn credentials(&self) -> Option<Credentials> {
+        if self.service_pass.is_none() || self.app_id.is_none() {
+            return None;
+        }
+        Some(Credentials::new(self.service_pass.clone().unwrap(), self.app_id.clone().unwrap()))
     }
 }
