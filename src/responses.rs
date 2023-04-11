@@ -63,7 +63,7 @@ macro_rules! generate_get_response {
         pub struct $name<T> {
             /// The COMRESULT of the request. Contains information about the status of the request.
             #[serde(rename = "COMRESULT")]
-            pub com_result: ComResult,
+            pub com_result: $crate::responses::ComResult,
             /// The container struct for the list of items.
             #[serde(rename = $container_name)]
             pub container: $container_type<T>,
