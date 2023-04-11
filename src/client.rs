@@ -14,7 +14,7 @@ use crate::{AppHash, Cursor, Credentials, WWClientResult};
 #[builder(build_method(into = WebwareClient))]
 pub struct InternalWebwareClient {
     /// Full URL to the WEBWARE instance
-    #[builder(setter(transform = |host: String, port: u16, wwsvc_path: Option<&str>| {
+    #[builder(setter(transform = |host: &str, port: u16, wwsvc_path: Option<&str>| {
         if let Some(wwsvc_path) = wwsvc_path {
             format!("https://{}:{}/{}/", host, port, wwsvc_path)
         } else {
