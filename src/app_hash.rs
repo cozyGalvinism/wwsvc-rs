@@ -16,7 +16,7 @@ impl AppHash {
     /// Returns a new AppHash object from the current request ID and the application secret of a `WebwareClient`.
     ///
     /// Can be formatted as lowercase hexadecimal for ease of use.
-    pub fn new(request_id: u32, app_secret: String) -> AppHash {
+    pub fn new(request_id: u32, app_secret: &str) -> AppHash {
         let now = fmt_http_date(SystemTime::now());
         let new_request_id = request_id + 1;
         let combined = format!("{}{}", app_secret, now);

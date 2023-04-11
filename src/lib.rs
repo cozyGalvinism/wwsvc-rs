@@ -17,6 +17,10 @@ extern crate serde_json;
 pub mod cursor;
 /// Module containing the app hash, which is needed for each request.
 pub mod app_hash;
+/// Module containing the error type.
+pub mod error;
+
+mod responses;
 mod credentials;
 
 pub use reqwest::Method;
@@ -29,3 +33,7 @@ pub mod client;
 pub use client::WebwareClient;
 pub use reqwest::Response;
 pub use credentials::Credentials;
+pub use responses::*;
+
+/// Result type for the wwsvc-rs crate.
+pub type WWClientResult<T> = std::result::Result<T, error::WWSVCError>;

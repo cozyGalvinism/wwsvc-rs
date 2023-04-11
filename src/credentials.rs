@@ -1,6 +1,6 @@
 use serde::{Serialize, Deserialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 /// Credentials for the client.
 pub struct Credentials {
     /// The service pass for the client.
@@ -11,10 +11,10 @@ pub struct Credentials {
 
 impl Credentials {
     /// Creates a new `Credentials` struct.
-    pub fn new(service_pass: String, app_id: String) -> Credentials {
+    pub fn new(service_pass: &str, app_id: &str) -> Credentials {
         Credentials {
-            service_pass,
-            app_id,
+            service_pass: service_pass.to_string(),
+            app_id: app_id.to_string(),
         }
     }
 }

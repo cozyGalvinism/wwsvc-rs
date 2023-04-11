@@ -33,7 +33,7 @@ impl Cursor {
 
     /// Returns whether the cursor is closed.
     pub fn closed(&self) -> bool {
-        self.cursor_id == *"CLOSED"
+        &self.cursor_id == "CLOSED"
     }
 
     /// Sets the cursor ID.
