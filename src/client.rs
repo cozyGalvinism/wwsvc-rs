@@ -23,10 +23,13 @@ pub struct InternalWebwareClient {
     }))]
     webware_url: String,
     /// Vendor hash of the application
+    #[builder(setter(transform = |vendor_hash: &str| vendor_hash.to_string()))]
     vendor_hash: String,
     /// Application hash of the application
+    #[builder(setter(transform = |app_hash: &str| app_hash.to_string()))]
     app_hash: String,
     /// Application secret, assigned by the WEBWARE instance
+    #[builder(setter(transform = |app_secret: &str| app_secret.to_string()))]
     secret: String,
     /// Revision of the application
     revision: u32,
