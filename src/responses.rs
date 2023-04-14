@@ -74,7 +74,7 @@ macro_rules! generate_get_response {
         pub struct $container_type<T> {
             /// The list of items.
             #[serde(rename = $list_name)]
-            pub list: Vec<T>,
+            pub list: Option<Vec<T>>,
         }
     };
 }
