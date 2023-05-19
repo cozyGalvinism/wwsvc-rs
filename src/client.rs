@@ -263,9 +263,11 @@ impl WebwareClient {
             .json(&body)
             .send().await?;
         
-        if let Some(cursor) = &mut self.cursor {
-            if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
-                cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
+        if !self.suspend_cursor {
+            if let Some(cursor) = &mut self.cursor {
+                if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
+                    cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
+                }
             }
         }
         
