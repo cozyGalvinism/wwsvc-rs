@@ -1,6 +1,6 @@
 [package]
 name = "wwsvc-rs"
-version = "3.0.0-pre7"
+version = "3.0.0-pre8"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]

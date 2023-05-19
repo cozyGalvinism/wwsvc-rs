@@ -153,12 +153,14 @@ impl WebwareClient {
                 ("WWSVC-HASH", format!("{:x}", app_hash))
             ]);
 
-            if let Some(cursor) = &self.cursor {
-                if !cursor.closed() {
-                    header_vec.append(&mut vec![
-                        ("WWSVC-CURSOR", cursor.cursor_id.to_string())
-                    ]);
-                    max_lines = cursor.max_lines;
+            if !self.suspend_cursor {
+                if let Some(cursor) = &self.cursor {
+                    if !cursor.closed() {
+                        header_vec.append(&mut vec![
+                            ("WWSVC-CURSOR", cursor.cursor_id.to_string())
+                        ]);
+                        max_lines = cursor.max_lines;
+                    }
                 }
             }
         }
