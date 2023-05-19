@@ -72,6 +72,8 @@ pub struct WebwareClient {
     current_request: u32,
     /// The client
     client: reqwest::Client,
+    /// Suspend the cursor
+    suspend_cursor: bool,
 }
 
 impl From<InternalWebwareClient> for WebwareClient {
@@ -93,6 +95,7 @@ impl From<InternalWebwareClient> for WebwareClient {
             cursor: client.cursor,
             current_request: 0,
             client: req_client,
+            suspend_cursor: false,
         }
     }
 }
@@ -106,6 +109,16 @@ impl WebwareClient {
     /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
     pub fn create_cursor(&mut self, max_lines: u32) {
         self.cursor = Some(Cursor::new(max_lines));
+    }
+
+    /// Suspends the cursor, so that it is not used for the next request
+    pub fn suspend_cursor(&mut self) {
+        self.suspend_cursor = true;
+    }
+
+    /// Resumes the cursor, so that it is used for the next request
+    pub fn resume_cursor(&mut self) {
+        self.suspend_cursor = false;
     }
 
     /// Returns whether the current cursor is closed.
