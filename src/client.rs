@@ -2,7 +2,7 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::convert::TryInto;
+use std::convert::{TryInto, TryFrom};
 use typed_builder::TypedBuilder;
 use url::Url;
 
@@ -42,9 +42,6 @@ pub struct InternalWebwareClient {
     /// Timeout for the request
     #[builder(default = std::time::Duration::from_secs(60))]
     timeout: std::time::Duration,
-    /// Request cursor for pagination,
-    #[builder(default)]
-    cursor: Option<Cursor>,
 }
 
 /// The state of the client
@@ -96,7 +93,7 @@ pub struct WebwareClient<State = Unregistered> {
     state: std::marker::PhantomData<State>,
 }
 
-impl From<InternalWebwareClient> for WebwareClient {
+impl From<InternalWebwareClient> for WebwareClient<Unregistered> {
     fn from(client: InternalWebwareClient) -> Self {
         let req_client = reqwest::Client::builder()
             .danger_accept_invalid_certs(client.allow_insecure)
@@ -110,14 +107,45 @@ impl From<InternalWebwareClient> for WebwareClient {
             app_hash: client.app_hash,
             secret: client.secret,
             revision: client.revision,
-            credentials: client.credentials,
+            credentials: None,
             result_max_lines: client.result_max_lines,
-            cursor: client.cursor,
+            cursor: None,
             current_request: 0,
             client: req_client,
             suspend_cursor: false,
             state: std::marker::PhantomData,
         }
+    }
+}
+
+impl TryFrom<InternalWebwareClient> for WebwareClient<Registered> {
+    type Error = WWSVCError;
+
+    fn try_from(client: InternalWebwareClient) -> Result<Self, Self::Error> {
+        let req_client = reqwest::Client::builder()
+            .danger_accept_invalid_certs(client.allow_insecure)
+            .timeout(client.timeout)
+            .build()
+            .expect("Failed to build client");
+
+        if client.credentials.is_none() {
+            return Err(WWSVCError::MissingCredentials);
+        }
+
+        Ok(WebwareClient {
+            webware_url: client.webware_url,
+            vendor_hash: client.vendor_hash,
+            app_hash: client.app_hash,
+            secret: client.secret,
+            revision: client.revision,
+            credentials: client.credentials,
+            result_max_lines: client.result_max_lines,
+            cursor: None,
+            current_request: 0,
+            client: req_client,
+            suspend_cursor: false,
+            state: std::marker::PhantomData,
+        })
     }
 }
 
@@ -185,26 +213,9 @@ impl<State: Ready> WebwareClient<State> {
         }
     }
 
-    /// Suspends the cursor, so that it is not used for the next request
-    pub fn suspend_cursor(&mut self) {
-        self.suspend_cursor = true;
-    }
-
-    /// Resumes the cursor, so that it is used for the next request
-    pub fn resume_cursor(&mut self) {
-        self.suspend_cursor = false;
-    }
-
-    /// Returns whether the current cursor is closed.
-    ///
-    /// Returns None, if no cursor is available.
-    pub fn cursor_closed(&self) -> Option<bool> {
-        self.cursor.as_ref().map(|c| c.closed())
-    }
-
     /// Generates a set of credentials from the current client.
-    pub fn credentials(&self) -> Option<Credentials> {
-        self.credentials.clone()
+    pub fn credentials(&self) -> &Credentials {
+        self.credentials.as_ref().unwrap()
     }
 
     /// Sets the maximum amount of results that are returned in a response
@@ -421,8 +432,26 @@ impl<State: Ready> WebwareClient<State> {
     }
 }
 
-#[cfg(feature = "stream")]
 impl WebwareClient<OpenCursor> {
+    /// Suspends the cursor, so that it is not used for the next request
+    pub fn suspend_cursor(&mut self) {
+        self.suspend_cursor = true;
+    }
+
+    /// Resumes the cursor, so that it is used for the next request
+    pub fn resume_cursor(&mut self) {
+        self.suspend_cursor = false;
+    }
+
+    /// Returns whether the current cursor is closed.
+    ///
+    /// Returns None, if no cursor is available.
+    pub fn cursor_closed(&self) -> bool {
+        self.cursor.as_ref().unwrap().closed()
+    }
+
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    #[cfg(feature = "stream")]
     /// Performs a request using a cursor and returns a stream of JSON values.
     /// 
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
@@ -447,7 +476,7 @@ impl WebwareClient<OpenCursor> {
             state: std::marker::PhantomData::<Registered>,
         };
         let stream = async_stream::stream! {
-            while !self.cursor_closed().unwrap() {
+            while !self.cursor_closed() {
                 let response = self.request(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
                 yield response;
             }
@@ -456,6 +485,8 @@ impl WebwareClient<OpenCursor> {
         (consumed_client, stream)
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    #[cfg(feature = "stream")]
     /// Performs a request to the WEBSERVICES using a cursor and returns a stream of response objects.
     ///
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
@@ -480,7 +511,7 @@ impl WebwareClient<OpenCursor> {
             state: std::marker::PhantomData::<Registered>,
         };
         let stream = async_stream::stream! {
-            while !self.cursor_closed().unwrap() {
+            while !self.cursor_closed() {
                 let response = self.request_as_response(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
                 yield response;
             }
@@ -489,6 +520,8 @@ impl WebwareClient<OpenCursor> {
         (consumed_client, stream)
     }
 
+    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
+    #[cfg(feature = "stream")]
     /// Performs a request to the WEBSERVICES using a cursor and deserializes the response to the type `T`.
     /// 
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
@@ -516,7 +549,7 @@ impl WebwareClient<OpenCursor> {
             state: std::marker::PhantomData::<Registered>,
         };
         let stream = async_stream::stream! {
-            while !self.cursor_closed().unwrap() {
+            while !self.cursor_closed() {
                 let response = self.request_generic(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
                 yield response;
             }

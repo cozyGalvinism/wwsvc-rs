@@ -6,6 +6,11 @@ pub enum WWSVCError {
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::NotAuthenticated))]
     NotAuthenticated,
 
+    /// Missing credentials.
+    #[error("Missing credentials.")]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::MissingCredentials))]
+    MissingCredentials,
+
     /// The request to the server has failed.
     #[error(transparent)]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::ReqwestError))]

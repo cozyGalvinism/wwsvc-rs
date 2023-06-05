@@ -1,6 +1,6 @@
 [package]
 name = "wwsvc-rs"
-version = "3.0.0-pre10"
+version = "3.0.0-pre11"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
@@ -10,6 +10,7 @@ include = ["src/**/*", "Cargo.toml"]
 
 [package.metadata.docs.rs]
 all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

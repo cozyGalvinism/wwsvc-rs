@@ -1,5 +1,6 @@
 #![warn(missing_docs)]
 #![crate_name = "wwsvc_rs"]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! # WEBSERVICES Client
 //!
