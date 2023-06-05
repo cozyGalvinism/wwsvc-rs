@@ -1,27 +1,24 @@
-use reqwest::Response;
 use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::Response;
 use serde::de::DeserializeOwned;
+use std::collections::HashMap;
+use std::convert::TryInto;
 use typed_builder::TypedBuilder;
-use std::convert::{TryInto};
-use std::collections::{HashMap};
+use url::Url;
 
 use crate::error::WWSVCError;
 use crate::responses::RegisterResponse;
-use crate::{AppHash, Cursor, Credentials, WWClientResult};
+use crate::{AppHash, Credentials, Cursor, WWClientResult};
 
 /// The internal builder for constructing a `WebwareClient`
 #[derive(TypedBuilder)]
 #[builder(build_method(into = WebwareClient))]
 pub struct InternalWebwareClient {
     /// Full URL to the WEBWARE instance
-    #[builder(setter(transform = |host: &str, port: u16, wwsvc_path: Option<&str>| {
-        if let Some(wwsvc_path) = wwsvc_path {
-            format!("https://{}:{}/{}/", host, port, wwsvc_path)
-        } else {
-            format!("https://{}:{}/WWSVC/", host, port)
-        }
+    #[builder(setter(transform = |url: &str| {
+        Url::parse(url).expect("Failed to parse URL").join("/WWSVC/").expect("Failed to join URL")
     }))]
-    webware_url: String,
+    webware_url: Url,
     /// Vendor hash of the application
     #[builder(setter(transform = |vendor_hash: &str| vendor_hash.to_string()))]
     vendor_hash: String,
@@ -50,10 +47,30 @@ pub struct InternalWebwareClient {
     cursor: Option<Cursor>,
 }
 
+/// The state of the client
+/// 
+/// Unregistered: The client is not registered
+pub struct Unregistered;
+/// The state of the client
+/// 
+/// Registered: The client is registered
+pub struct Registered;
+
+/// The state of the client
+/// 
+/// Cursor: The client is registered and has a cursor
+pub struct OpenCursor;
+
+/// Marker trait for a ready client
+pub trait Ready {}
+
+impl Ready for Registered {}
+impl Ready for OpenCursor {}
+
 /// The web client to consume SoftENGINE's WEBSERVICES
-pub struct WebwareClient {
+pub struct WebwareClient<State = Unregistered> {
     /// Full URL to the WEBWARE instance
-    webware_url: String,
+    webware_url: Url,
     /// Vendor hash of the application
     vendor_hash: String,
     /// Application hash of the application
@@ -74,6 +91,9 @@ pub struct WebwareClient {
     client: reqwest::Client,
     /// Suspend the cursor
     suspend_cursor: bool,
+
+    
+    state: std::marker::PhantomData<State>,
 }
 
 impl From<InternalWebwareClient> for WebwareClient {
@@ -96,19 +116,73 @@ impl From<InternalWebwareClient> for WebwareClient {
             current_request: 0,
             client: req_client,
             suspend_cursor: false,
+            state: std::marker::PhantomData,
         }
     }
 }
 
-impl WebwareClient {
+impl<State> WebwareClient<State> {
     /// Creates a builder for the client
     pub fn builder() -> InternalWebwareClientBuilder {
         InternalWebwareClient::builder()
     }
+}
 
+impl WebwareClient {
+    /// Sends a `REGISTER` request to the WEBWARE instance and returns a registered client
+    /// or an error
+    pub async fn register(self) -> WWClientResult<WebwareClient<Registered>> {
+        // join self.webware_url and the register path
+        // example: "WWSERVICE", "REGISTER", &self.vendor_hash, &self.app_hash, &self.secret, &self.revision.to_string()
+        let target_url = self
+            .webware_url
+            .join("WWSERVICE")?
+            .join("REGISTER")?
+            .join(&self.vendor_hash)?
+            .join(&self.app_hash)?
+            .join(&self.secret)?
+            .join(&self.revision.to_string())?;
+        let response = self.client.get(target_url).send().await?;
+        let response_obj = response.json::<RegisterResponse>().await?;
+
+        Ok(WebwareClient {
+            webware_url: self.webware_url,
+            vendor_hash: self.vendor_hash,
+            app_hash: self.app_hash,
+            secret: self.secret,
+            revision: self.revision,
+            credentials: Some(Credentials {
+                service_pass: response_obj.service_pass.pass_id,
+                app_id: response_obj.service_pass.app_id,
+            }),
+            result_max_lines: self.result_max_lines,
+            cursor: self.cursor,
+            current_request: self.current_request,
+            client: self.client,
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<Registered>,
+        })
+    }
+}
+
+impl<State: Ready> WebwareClient<State> {
     /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
-    pub fn create_cursor(&mut self, max_lines: u32) {
-        self.cursor = Some(Cursor::new(max_lines));
+    pub fn create_cursor(self, max_lines: u32) -> WebwareClient<OpenCursor> {
+        let cursor = Cursor::new(max_lines);
+        WebwareClient {
+            webware_url: self.webware_url,
+            vendor_hash: self.vendor_hash,
+            app_hash: self.app_hash,
+            secret: self.secret,
+            revision: self.revision,
+            credentials: self.credentials,
+            result_max_lines: self.result_max_lines,
+            cursor: Some(cursor),
+            current_request: self.current_request,
+            client: self.client,
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<OpenCursor>,
+        }
     }
 
     /// Suspends the cursor, so that it is not used for the next request
@@ -122,10 +196,15 @@ impl WebwareClient {
     }
 
     /// Returns whether the current cursor is closed.
-    /// 
+    ///
     /// Returns None, if no cursor is available.
     pub fn cursor_closed(&self) -> Option<bool> {
         self.cursor.as_ref().map(|c| c.closed())
+    }
+
+    /// Generates a set of credentials from the current client.
+    pub fn credentials(&self) -> Option<Credentials> {
+        self.credentials.clone()
     }
 
     /// Sets the maximum amount of results that are returned in a response
@@ -136,29 +215,31 @@ impl WebwareClient {
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
-    pub fn get_default_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> WWClientResult<HeaderMap> {
+    pub fn get_default_headers(
+        &mut self,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<HeaderMap> {
         let mut max_lines = self.result_max_lines;
 
         let mut header_vec = vec![
             ("WWSVC-EXECUTE-MODE", "SYNCHRON".to_string()),
-            ("WWSVC-ACCEPT-RESULT-TYPE", "JSON".to_string())
+            ("WWSVC-ACCEPT-RESULT-TYPE", "JSON".to_string()),
         ];
-        
+
         if let Some(credentials) = &self.credentials {
             let app_hash = AppHash::new(self.current_request, &credentials.app_id);
             self.current_request = app_hash.request_id;
             header_vec.append(&mut vec![
                 ("WWSVC-REQID", format!("{}", self.current_request)),
-                ("WWSVC-TS",  app_hash.date_formatted.to_string()),
-                ("WWSVC-HASH", format!("{:x}", app_hash))
+                ("WWSVC-TS", app_hash.date_formatted.to_string()),
+                ("WWSVC-HASH", format!("{:x}", app_hash)),
             ]);
 
             if !self.suspend_cursor {
                 if let Some(cursor) = &self.cursor {
                     if !cursor.closed() {
-                        header_vec.append(&mut vec![
-                            ("WWSVC-CURSOR", cursor.cursor_id.to_string())
-                        ]);
+                        header_vec
+                            .append(&mut vec![("WWSVC-CURSOR", cursor.cursor_id.to_string())]);
                         max_lines = cursor.max_lines;
                     }
                 }
@@ -167,78 +248,109 @@ impl WebwareClient {
 
         header_vec.push(("WWSVC-ACCEPT-RESULT-MAX-LINES", max_lines.to_string()));
 
-        let mut headers: HashMap<String, String> = header_vec.iter()
-            .map(|(s1, s2)|(s1.to_string(), s2.to_string()))
+        let mut headers: HashMap<String, String> = header_vec
+            .iter()
+            .map(|(s1, s2)| (s1.to_string(), s2.to_string()))
             .collect();
-        
+
         if let Some(additional_headers) = additional_headers {
-            headers.extend(additional_headers.iter()
-                .map(|(s1, s2)|(s1.to_string(), s2.to_string())));
+            headers.extend(
+                additional_headers
+                    .iter()
+                    .map(|(s1, s2)| (s1.to_string(), s2.to_string())),
+            );
         }
 
         Ok((&headers).try_into()?)
     }
 
     /// Returns the same set of headers, that `get_default_headers()` returns, except the result type header is set to `BIN` instead.
-    pub fn get_bin_headers(&mut self, additional_headers: Option<HashMap<&str, &str>>) -> WWClientResult<HeaderMap> {
+    pub fn get_bin_headers(
+        &mut self,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<HeaderMap> {
         let mut headers = self.get_default_headers(additional_headers)?;
         headers.remove("WWSVC-ACCEPT-RESULT-TYPE");
         headers.append("WWSVC-ACCEPT-RESULT-TYPE", HeaderValue::from_str("BIN")?);
         Ok(headers)
     }
 
-    /// Builds a valid WEBSERVICES URL from URL parts
-    pub fn build_url(&self, parts: Vec<&str>) -> String {
-        let append = parts.join("/");
-        format!("{}{}", self.webware_url, append)
-    }
-
-    /// Sends a `REGISTER` request to the WEBWARE instance and returns whether the request succeeded or not.
-    ///
-    /// If the result is not Ok, the client has no valid service pass and cannot perform requests!
-    pub async fn register(&mut self) -> WWClientResult<()> {
-        let target_url = self.build_url(vec!["WWSERVICE", "REGISTER", &self.vendor_hash, &self.app_hash, &self.secret, &self.revision.to_string()]);
-        let response = self.client.get(target_url).send().await?;
-        let response_obj = response.json::<RegisterResponse>().await?;
-
-        self.credentials = Some(Credentials { service_pass: response_obj.service_pass.pass_id, app_id: response_obj.service_pass.app_id });
-
-        Ok(())
-    }
-
     /// Sends a `DEREGISTER` request to the WEBWARE instance, in order to invalidate the service pass.
-    ///
-    /// If the client was not authenticated using `register()` before, it will do nothing.
-    pub async fn deregister(&mut self) -> WWClientResult<()> {
+    pub async fn deregister(mut self) -> WWClientResult<WebwareClient<Unregistered>> {
         let credentials = self.credentials.take();
-        
+
         if let Some(credentials) = credentials {
-            let target_url = self.build_url(vec!["WWSERVICE", "DEREGISTER", &credentials.service_pass]);
+            let target_url = self
+                .webware_url
+                .join("WWSERVICE")?
+                .join("DEREGISTER")?
+                .join(&credentials.service_pass)?;
             let headers = self.get_default_headers(None)?;
             let _ = self.client.get(target_url).headers(headers).send().await;
         }
 
-        Ok(())
+        Ok(WebwareClient {
+            webware_url: self.webware_url,
+            vendor_hash: self.vendor_hash,
+            app_hash: self.app_hash,
+            secret: self.secret,
+            revision: self.revision,
+            credentials: None,
+            result_max_lines: self.result_max_lines,
+            cursor: self.cursor,
+            current_request: self.current_request,
+            client: self.client,
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<Unregistered>,
+        })
     }
 
     /// Performs a request to the WEBSERVICES and returns a JSON value.
-    pub async fn request(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> WWClientResult<serde_json::Value> {
-        return self.request_generic::<serde_json::Value>(method, function, version, parameters, additional_headers).await;
+    pub async fn request(
+        &mut self,
+        method: reqwest::Method,
+        function: &str,
+        version: u32,
+        parameters: HashMap<&str, &str>,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<serde_json::Value> {
+        self
+            .request_generic::<serde_json::Value>(
+                method,
+                function,
+                version,
+                parameters,
+                additional_headers,
+            )
+            .await
     }
 
     /// Performs a request to the WEBSERVICES and returns a response object.
-    pub async fn request_as_response(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> WWClientResult<Response> {
+    pub async fn request_as_response(
+        &mut self,
+        method: reqwest::Method,
+        function: &str,
+        version: u32,
+        parameters: HashMap<&str, &str>,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<Response> {
         if self.credentials.is_none() {
             return Err(WWSVCError::NotAuthenticated);
         }
-        
-        let target_url = self.build_url(vec!["EXECJSON"]);
+
+        let target_url = self.webware_url.join("EXECJSON")?;
         let headers = self.get_default_headers(additional_headers)?;
         let mut param_vec: Vec<HashMap<String, String>> = Vec::new();
         let app_hash_header = headers.get("WWSVC-HASH");
         let timestamp_header = headers.get("WWSVC-TS");
-        let app_hash: String = app_hash_header.unwrap_or(&HeaderValue::from_str("").unwrap()).to_str()?.to_string();
-        let timestamp: String = timestamp_header.unwrap_or(&HeaderValue::from_str("").unwrap()).to_str()?.to_string();
+        let app_hash: String = app_hash_header
+            .unwrap_or(&HeaderValue::from_str("").unwrap())
+            .to_str()?
+            .to_string();
+        let timestamp: String = timestamp_header
+            .unwrap_or(&HeaderValue::from_str("").unwrap())
+            .to_str()?
+            .to_string();
 
         for (p_key, p_value) in parameters {
             let mut map: HashMap<String, String> = HashMap::new();
@@ -260,36 +372,156 @@ impl WebwareClient {
                 "EXECUTE_MODE": "SYNCHRON"
             }
         });
-        let response = self.client.request(method, target_url)
+        let response = self
+            .client
+            .request(method, target_url)
             .headers(headers)
             .json(&body)
-            .send().await?;
-        
+            .send()
+            .await?;
+
         if !self.suspend_cursor {
             if let Some(cursor) = &mut self.cursor {
                 if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
-                    cursor.set_cursor_id(response.headers().get("WWSVC-CURSOR").unwrap().to_str().unwrap().to_string());
+                    cursor.set_cursor_id(
+                        response
+                            .headers()
+                            .get("WWSVC-CURSOR")
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    );
                 }
             }
         }
-        
+
         Ok(response)
     }
 
     /// Performs a request to the WEBSERVICES and deserializes the response to the type `T`.
     ///
     /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
-    pub async fn request_generic<T>(&mut self, method: reqwest::Method, function: &str, version: u32, parameters: HashMap<&str, &str>, additional_headers: Option<HashMap<&str, &str>>) -> WWClientResult<T> 
+    pub async fn request_generic<T>(
+        &mut self,
+        method: reqwest::Method,
+        function: &str,
+        version: u32,
+        parameters: HashMap<&str, &str>,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<T>
     where
-        T:DeserializeOwned
+        T: DeserializeOwned,
     {
-        let response = self.request_as_response(method, function, version, parameters, additional_headers).await?;
+        let response = self
+            .request_as_response(method, function, version, parameters, additional_headers)
+            .await?;
         let response_obj = response.json::<T>().await?;
         Ok(response_obj)
     }
+}
 
-    /// Generates a set of credentials from the current client.
-    pub fn credentials(&self) -> Option<Credentials> {
-        self.credentials.clone()
+#[cfg(feature = "stream")]
+impl WebwareClient<OpenCursor> {
+    /// Performs a request using a cursor and returns a stream of JSON values.
+    /// 
+    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
+    pub async fn request_stream<'a>(mut self, 
+        method: reqwest::Method,
+        function: &'a str,
+        version: u32,
+        parameters: HashMap<&'a str, &'a str>,
+        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<serde_json::Value>> + 'a) {
+        let consumed_client = WebwareClient {
+            webware_url: self.webware_url.clone(),
+            vendor_hash: self.vendor_hash.clone(),
+            app_hash: self.app_hash.clone(),
+            secret: self.secret.clone(),
+            revision: self.revision,
+            credentials: self.credentials.clone(),
+            result_max_lines: self.result_max_lines,
+            cursor: None,
+            current_request: self.current_request,
+            client: self.client.clone(),
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<Registered>,
+        };
+        let stream = async_stream::stream! {
+            while !self.cursor_closed().unwrap() {
+                let response = self.request(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
+                yield response;
+            }
+        };
+
+        (consumed_client, stream)
+    }
+
+    /// Performs a request to the WEBSERVICES using a cursor and returns a stream of response objects.
+    ///
+    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
+    pub async fn request_as_response_stream<'a>(mut self, 
+        method: reqwest::Method,
+        function: &'a str,
+        version: u32,
+        parameters: HashMap<&'a str, &'a str>,
+        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<Response>> + 'a) {
+        let consumed_client = WebwareClient {
+            webware_url: self.webware_url.clone(),
+            vendor_hash: self.vendor_hash.clone(),
+            app_hash: self.app_hash.clone(),
+            secret: self.secret.clone(),
+            revision: self.revision,
+            credentials: self.credentials.clone(),
+            result_max_lines: self.result_max_lines,
+            cursor: None,
+            current_request: self.current_request,
+            client: self.client.clone(),
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<Registered>,
+        };
+        let stream = async_stream::stream! {
+            while !self.cursor_closed().unwrap() {
+                let response = self.request_as_response(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
+                yield response;
+            }
+        };
+
+        (consumed_client, stream)
+    }
+
+    /// Performs a request to the WEBSERVICES using a cursor and deserializes the response to the type `T`.
+    /// 
+    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
+    pub async fn request_generic_stream<'a, T>(mut self, 
+        method: reqwest::Method,
+        function: &'a str,
+        version: u32,
+        parameters: HashMap<&'a str, &'a str>,
+        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<T>> + 'a) 
+    where
+        T: DeserializeOwned + 'a,
+    {
+        let consumed_client = WebwareClient {
+            webware_url: self.webware_url.clone(),
+            vendor_hash: self.vendor_hash.clone(),
+            app_hash: self.app_hash.clone(),
+            secret: self.secret.clone(),
+            revision: self.revision,
+            credentials: self.credentials.clone(),
+            result_max_lines: self.result_max_lines,
+            cursor: None,
+            current_request: self.current_request,
+            client: self.client.clone(),
+            suspend_cursor: self.suspend_cursor,
+            state: std::marker::PhantomData::<Registered>,
+        };
+        let stream = async_stream::stream! {
+            while !self.cursor_closed().unwrap() {
+                let response = self.request_generic(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
+                yield response;
+            }
+        };
+
+        (consumed_client, stream)
     }
 }

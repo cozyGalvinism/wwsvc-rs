@@ -25,4 +25,9 @@ pub enum WWSVCError {
     #[error(transparent)]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::HeaderValueToStrError))]
     HeaderValueToStrError(#[from] http::header::ToStrError),
+
+    /// Url parsing error.
+    #[error(transparent)]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::UrlParseError))]
+    UrlParseError(#[from] url::ParseError),
 }
