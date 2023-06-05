@@ -1,12 +1,12 @@
 [package]
 name = "wwsvc-rs"
-version = "3.0.0-pre9"
+version = "3.0.0-pre10"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
 description = "A web client which is used to consume SoftENGINE's WEBSERVICES, a proprietary API for their software WEBWARE."
 repository = "https://github.com/cozyGalvinism/wwsvc-rs"
-exclude = [".gitignore", ".vscode"]
+include = ["src/**/*", "Cargo.toml"]
 
 [package.metadata.docs.rs]
 all-features = true
