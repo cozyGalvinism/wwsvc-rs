@@ -1,3 +1,9 @@
+#![warn(missing_docs)]
+#![crate_name = "wwsvc_rs_derive"]
+//! # wwsvc-rs-derive
+//!
+//! This is a set of macros to derive the traits from wwsvc-rs.
+
 extern crate proc_macro;
 
 use darling::{FromDeriveInput, FromField};

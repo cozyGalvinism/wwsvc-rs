@@ -1,7 +1,11 @@
 [package]
 name = "wwsvc-rs-derive"
 version = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+description = "Derive macros for wwsvc-rs"
 edition = "2021"
+include = ["src/**/*", "Cargo.toml"]
 
 [lib]
 proc-macro = true
