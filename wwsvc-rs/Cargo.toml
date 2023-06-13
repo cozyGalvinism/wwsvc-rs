@@ -29,7 +29,7 @@ url = "2.3.1"
 async-stream = { version = "0.3.5", optional = true }
 futures-core = { version = "0.3.28", optional = true }
 futures-util = { version = "0.3.28", optional = true }
-wwsvc-rs-derive = { path = "../wwsvc-rs-derive", optional = true, version = "=3.0.0-pre.14" }
+wwsvc-rs-derive = { path = "../wwsvc-rs-derive", optional = true, version = "=3.0.0-pre.15" }
 async-trait = { version = "0.1.68", optional = true }
 
 [features]

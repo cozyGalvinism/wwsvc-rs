@@ -163,6 +163,23 @@ impl WebwareClient {
     /// Sends a `REGISTER` request to the WEBWARE instance and returns a registered client
     /// or an error
     pub async fn register(self) -> WWClientResult<WebwareClient<Registered>> {
+        if self.credentials.is_some() {
+            return Ok(WebwareClient {
+                webware_url: self.webware_url,
+                vendor_hash: self.vendor_hash,
+                app_hash: self.app_hash,
+                secret: self.secret,
+                revision: self.revision,
+                credentials: self.credentials,
+                result_max_lines: self.result_max_lines,
+                cursor: self.cursor,
+                current_request: self.current_request,
+                client: self.client,
+                suspend_cursor: self.suspend_cursor,
+                state: std::marker::PhantomData::<Registered>,
+            });
+        }
+
         // join self.webware_url and the register path
         // example: "WWSERVICE", "REGISTER", &self.vendor_hash, &self.app_hash, &self.secret, &self.revision.to_string()
         let target_url = self
