@@ -2,19 +2,22 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Response;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
-use std::convert::{TryInto, TryFrom};
+use std::convert::{TryFrom, TryInto};
 use typed_builder::TypedBuilder;
 use url::Url;
 
+use crate::client::states::*;
 use crate::error::WWSVCError;
 use crate::responses::RegisterResponse;
 use crate::{AppHash, Credentials, Cursor, WWClientResult};
 
 /// The internal builder for constructing a `WebwareClient`
 #[derive(TypedBuilder)]
-#[builder(build_method(into = WebwareClient))]
+#[builder(build_method(into = WebwareClient::<Unregistered>))]
 pub struct InternalWebwareClient {
-    /// Full URL to the WEBWARE instance
+    /// Full URL to the WEBWARE instance without the path to the WWSVC
+    ///
+    /// Example: `https://localhost:8080`
     #[builder(setter(transform = |url: &str| {
         Url::parse(url).expect("Failed to parse URL").join("/WWSVC/").expect("Failed to join URL")
     }))]
@@ -31,7 +34,7 @@ pub struct InternalWebwareClient {
     /// Revision of the application
     revision: u32,
     /// Credentials of the client
-    #[builder(default)]
+    #[builder(default, setter(transform = |credentials: Credentials| Some(credentials)))]
     credentials: Option<Credentials>,
     /// Maximum amount of objects that are returned in a request
     #[builder(default = 1000)]
@@ -44,25 +47,28 @@ pub struct InternalWebwareClient {
     timeout: std::time::Duration,
 }
 
-/// The state of the client
-/// 
-/// Unregistered: The client is not registered
-pub struct Unregistered;
-/// The state of the client
-/// 
-/// Registered: The client is registered
-pub struct Registered;
+/// Contains the the states the client can be in
+pub mod states {
+    /// The state of the client
+    ///
+    /// Unregistered: The client is not registered
+    pub struct Unregistered;
+    /// The state of the client
+    ///
+    /// Registered: The client is registered
+    pub struct Registered;
 
-/// The state of the client
-/// 
-/// Cursor: The client is registered and has a cursor
-pub struct OpenCursor;
+    /// The state of the client
+    ///
+    /// Cursor: The client is registered and has a cursor
+    pub struct OpenCursor;
 
-/// Marker trait for a ready client
-pub trait Ready {}
+    /// Marker trait for a ready client
+    pub trait Ready {}
 
-impl Ready for Registered {}
-impl Ready for OpenCursor {}
+    impl Ready for Registered {}
+    impl Ready for OpenCursor {}
+}
 
 /// The web client to consume SoftENGINE's WEBSERVICES
 pub struct WebwareClient<State = Unregistered> {
@@ -89,7 +95,6 @@ pub struct WebwareClient<State = Unregistered> {
     /// Suspend the cursor
     suspend_cursor: bool,
 
-    
     state: std::marker::PhantomData<State>,
 }
 
@@ -113,7 +118,7 @@ impl From<InternalWebwareClient> for WebwareClient<Unregistered> {
             current_request: 0,
             client: req_client,
             suspend_cursor: false,
-            state: std::marker::PhantomData,
+            state: std::marker::PhantomData::<Unregistered>,
         }
     }
 }
@@ -144,19 +149,17 @@ impl TryFrom<InternalWebwareClient> for WebwareClient<Registered> {
             current_request: 0,
             client: req_client,
             suspend_cursor: false,
-            state: std::marker::PhantomData,
+            state: std::marker::PhantomData::<Registered>,
         })
     }
 }
 
-impl<State> WebwareClient<State> {
+impl WebwareClient {
     /// Creates a builder for the client
     pub fn builder() -> InternalWebwareClientBuilder {
         InternalWebwareClient::builder()
     }
-}
 
-impl WebwareClient {
     /// Sends a `REGISTER` request to the WEBWARE instance and returns a registered client
     /// or an error
     pub async fn register(self) -> WWClientResult<WebwareClient<Registered>> {
@@ -164,12 +167,12 @@ impl WebwareClient {
         // example: "WWSERVICE", "REGISTER", &self.vendor_hash, &self.app_hash, &self.secret, &self.revision.to_string()
         let target_url = self
             .webware_url
-            .join("WWSERVICE")?
-            .join("REGISTER")?
-            .join(&self.vendor_hash)?
-            .join(&self.app_hash)?
-            .join(&self.secret)?
-            .join(&self.revision.to_string())?;
+            .join("WWSERVICE/")?
+            .join("REGISTER/")?
+            .join(&format!("{}/", self.vendor_hash))?
+            .join(&format!("{}/", self.app_hash))?
+            .join(&format!("{}/", self.secret))?
+            .join(&format!("{}/", self.revision))?;
         let response = self.client.get(target_url).send().await?;
         let response_obj = response.json::<RegisterResponse>().await?;
 
@@ -293,9 +296,9 @@ impl<State: Ready> WebwareClient<State> {
         if let Some(credentials) = credentials {
             let target_url = self
                 .webware_url
-                .join("WWSERVICE")?
-                .join("DEREGISTER")?
-                .join(&credentials.service_pass)?;
+                .join("WWSERVICE/")?
+                .join("DEREGISTER/")?
+                .join(&format!("{}/", &credentials.service_pass))?;
             let headers = self.get_default_headers(None)?;
             let _ = self.client.get(target_url).headers(headers).send().await;
         }
@@ -325,15 +328,14 @@ impl<State: Ready> WebwareClient<State> {
         parameters: HashMap<&str, &str>,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<serde_json::Value> {
-        self
-            .request_generic::<serde_json::Value>(
-                method,
-                function,
-                version,
-                parameters,
-                additional_headers,
-            )
-            .await
+        self.request_generic::<serde_json::Value>(
+            method,
+            function,
+            version,
+            parameters,
+            additional_headers,
+        )
+        .await
     }
 
     /// Performs a request to the WEBSERVICES and returns a response object.
@@ -453,14 +455,19 @@ impl WebwareClient<OpenCursor> {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     #[cfg(feature = "stream")]
     /// Performs a request using a cursor and returns a stream of JSON values.
-    /// 
+    ///
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_stream<'a>(mut self, 
+    pub async fn request_stream<'a>(
+        mut self,
         method: reqwest::Method,
         function: &'a str,
         version: u32,
         parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<serde_json::Value>> + 'a) {
+        additional_headers: Option<HashMap<&'a str, &'a str>>,
+    ) -> (
+        WebwareClient<Registered>,
+        impl futures_core::Stream<Item = WWClientResult<serde_json::Value>> + 'a,
+    ) {
         let consumed_client = WebwareClient {
             webware_url: self.webware_url.clone(),
             vendor_hash: self.vendor_hash.clone(),
@@ -490,12 +497,17 @@ impl WebwareClient<OpenCursor> {
     /// Performs a request to the WEBSERVICES using a cursor and returns a stream of response objects.
     ///
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_as_response_stream<'a>(mut self, 
+    pub async fn request_as_response_stream<'a>(
+        mut self,
         method: reqwest::Method,
         function: &'a str,
         version: u32,
         parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<Response>> + 'a) {
+        additional_headers: Option<HashMap<&'a str, &'a str>>,
+    ) -> (
+        WebwareClient<Registered>,
+        impl futures_core::Stream<Item = WWClientResult<Response>> + 'a,
+    ) {
         let consumed_client = WebwareClient {
             webware_url: self.webware_url.clone(),
             vendor_hash: self.vendor_hash.clone(),
@@ -523,14 +535,19 @@ impl WebwareClient<OpenCursor> {
     #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
     #[cfg(feature = "stream")]
     /// Performs a request to the WEBSERVICES using a cursor and deserializes the response to the type `T`.
-    /// 
+    ///
     /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_generic_stream<'a, T>(mut self, 
+    pub async fn request_generic_stream<'a, T>(
+        mut self,
         method: reqwest::Method,
         function: &'a str,
         version: u32,
         parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>) -> (WebwareClient<Registered>, impl futures_core::Stream<Item = WWClientResult<T>> + 'a) 
+        additional_headers: Option<HashMap<&'a str, &'a str>>,
+    ) -> (
+        WebwareClient<Registered>,
+        impl futures_core::Stream<Item = WWClientResult<T>> + 'a,
+    )
     where
         T: DeserializeOwned + 'a,
     {

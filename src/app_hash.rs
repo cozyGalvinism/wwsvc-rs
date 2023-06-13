@@ -1,6 +1,6 @@
-use httpdate::fmt_http_date;
 use encoding_rs::WINDOWS_1252;
-use std::time::{SystemTime};
+use httpdate::fmt_http_date;
+use std::time::SystemTime;
 
 /// Represents a request hash object, used for securing requests
 pub struct AppHash {
@@ -9,7 +9,7 @@ pub struct AppHash {
     /// The resulting hash as String
     pub hash: String,
     /// The current date, formatted as IMF-fixdate
-    pub date_formatted: String
+    pub date_formatted: String,
 }
 
 impl AppHash {
@@ -25,7 +25,7 @@ impl AppHash {
         AppHash {
             request_id: new_request_id,
             hash: md5_hash,
-            date_formatted: now
+            date_formatted: now,
         }
     }
 }

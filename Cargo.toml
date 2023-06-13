@@ -1,6 +1,6 @@
 [package]
 name = "wwsvc-rs"
-version = "3.0.0-pre11"
+version = "3.0.0-pre.12"
 edition = "2018"
 license = "MIT"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
@@ -29,8 +29,14 @@ url = "2.3.1"
 async-stream = { version = "0.3.5", optional = true }
 futures-core = { version = "0.3.28", optional = true }
 futures-util = { version = "0.3.28", optional = true }
+wwsvc-rs-derive = { path = "wwsvc-rs-derive", optional = true }
+async-trait = { version = "0.1.68", optional = true }
 
 [features]
 default = ["stream"]
 stream = ["dep:async-stream", "dep:futures-core", "dep:futures-util"]
+derive = ["dep:wwsvc-rs-derive", "dep:async-trait"]
 
+[dev-dependencies]
+dotenv = "0.15.0"
+tokio = { version = "1.28.2", features = ["full"] }
