@@ -70,6 +70,8 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
     let full_function_name = format!("{function}.GET");
     let response_ident = syn::Ident::new(&response_type, name.span());
     let container_ident = syn::Ident::new(&container_type, name.span());
+    // collect fields to comma separated string
+    let available_fields = fields.join(",");
 
     let function_version = if let Some(version) = version {
         quote! {
@@ -103,7 +105,7 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
         impl wwsvc_rs::traits::WWSVCGetData for #name {
             const FUNCTION: &'static str = #full_function_name;
             #function_version
-            const FIELDS: &'static str = #(#fields),*;
+            const FIELDS: &'static str = #available_fields;
 
             type Response = #response_ident;
             type Container = #container_ident;

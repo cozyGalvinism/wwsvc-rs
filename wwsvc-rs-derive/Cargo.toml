@@ -3,8 +3,9 @@ name = "wwsvc-rs-derive"
 version = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
-description = "Derive macros for wwsvc-rs"
+repository = { workspace = true }
 edition = { workspace = true }
+description = "Derive macros for wwsvc-rs"
 include = ["src/**/*", "Cargo.toml"]
 
 [lib]
