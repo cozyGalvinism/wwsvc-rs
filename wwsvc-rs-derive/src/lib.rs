@@ -20,7 +20,7 @@ struct WWSVCGetAttributes {
 }
 
 #[derive(FromField)]
-#[darling(attributes(serde))]
+#[darling(attributes(serde), allow_unknown_fields)]
 struct WWSVCGetFieldAttributes {
     rename: String,
 }
