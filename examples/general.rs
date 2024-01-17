@@ -1,4 +1,4 @@
-use http::Method;
+use reqwest::Method;
 use serde::Deserialize;
 use wwsvc_rs::{WebwareClient, Registered, collection, generate_get_response};
 

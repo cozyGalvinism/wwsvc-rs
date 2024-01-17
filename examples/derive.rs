@@ -1,6 +1,7 @@
-use wwsvc_rs::{collection, WWSVCGetData};
+use serde::Deserialize;
+use wwsvc_rs::{WWSVCGetData, WebwareClient, collection};
 
-#[derive(WWSVCGetData, Debug, serde::Deserialize, Clone)]
+#[derive(WWSVCGetData, Debug, Deserialize, Clone)]
 #[wwsvc(function = "ARTIKEL")]
 pub struct ArticleData {
     #[serde(rename = "ART_1_25")]
@@ -9,35 +10,26 @@ pub struct ArticleData {
 
 #[tokio::main]
 async fn main() {
-    // Construct a new client.
-    let client = wwsvc_rs::WebwareClient::builder()
-        .webware_url(std::env::var("WEBWARE_URL").unwrap().as_str())
-        .vendor_hash(std::env::var("VENDOR_HASH").unwrap().as_str())
-        .app_hash(std::env::var("APP_HASH").unwrap().as_str())
-        .secret(std::env::var("APP_SECRET").unwrap().as_str())
-        .revision(std::env::var("REVISION").unwrap().parse().unwrap())
-        // Allow insecure connections. Remove this in for live applications.
-        .allow_insecure(true)
+    let vendor_hash = std::env::var("WW_VENDOR_HASH").expect("WW_VENDOR_HASH not set");
+    let app_hash = std::env::var("WW_APP_HASH").expect("WW_APP_HASH not set");
+    let revision = std::env::var("WW_REVISION").expect("WW_REVISION not set").parse().unwrap();
+    let secret = std::env::var("WW_SECRET").expect("WW_SECRET not set");
+    let webware_url = std::env::var("WW_WEBWARE_URL").expect("WW_WEBWARE_URL not set");
+
+    let client = WebwareClient::builder()
+        .webware_url(&webware_url)
+        .vendor_hash(&vendor_hash)
+        .app_hash(&app_hash)
+        .secret(&secret)
+        .revision(revision)
         .build();
 
-    // Register the client.
-    let mut registered_client = client.register().await.unwrap();
+    let mut registered_client = client.register().await.expect("failed to register");
 
-    // Retrieve the article data.
     let articles = ArticleData::get(
         &mut registered_client,
-        collection! {
-            "ARTNR" => "Artikel19Prozent",
-        },
-    )
-    .await
-    .unwrap();
+        collection! {},
+    ).await.unwrap();
 
-    let list = articles.container.list.unwrap();
-    for article in list {
-        println!("{:?}", article);
-    }
-
-    // Deregister the client.
-    registered_client.deregister().await.unwrap();
+    println!("{:#?}", articles);
 }
