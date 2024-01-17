@@ -8,7 +8,7 @@
 //!
 //! ## Usage
 //!
-//! ```no_run
+//! ```rust,no_run
 //! use wwsvc_rs::{WebwareClient, Unregistered, WWSVCGetData, collection};
 //!
 //! #[derive(WWSVCGetData, Debug, Clone, serde::Deserialize)]
