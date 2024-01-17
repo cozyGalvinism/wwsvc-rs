@@ -37,29 +37,4 @@ pub trait WWSVCGetData {
             )
             .await
     }
-
-    #[cfg(feature = "stream")]
-    /// Requests a stream of this data from the server.
-    async fn get_stream<'a>(
-        client: crate::client::WebwareClient<crate::OpenCursor>,
-        mut parameters: HashMap<&'a str, &'a str>,
-    ) -> (
-        crate::client::WebwareClient<crate::Registered>,
-        Box<dyn futures_core::Stream<Item = WWClientResult<Self>> + 'a>,
-    )
-    where
-        Self: Sized + serde::de::DeserializeOwned + 'a,
-    {
-        parameters.insert("FELDER", Self::FIELDS);
-        let (client, data) = client
-            .request_generic_stream(
-                Self::METHOD,
-                Self::FUNCTION,
-                Self::VERSION,
-                parameters,
-                None,
-            )
-            .await;
-        (client, Box::new(data))
-    }
 }

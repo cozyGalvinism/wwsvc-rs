@@ -1,10 +1,11 @@
 [package]
 name = "wwsvc-rs-derive"
-version = { workspace = true }
-license = { workspace = true }
-authors = { workspace = true }
-repository = { workspace = true }
-edition = { workspace = true }
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 description = "Derive macros for wwsvc-rs"
 include = ["src/**/*", "Cargo.toml"]
 
@@ -14,7 +15,7 @@ proc-macro = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-darling = "0.20.1"
-proc-macro2 = "1.0.59"
-quote = "1.0.28"
-syn = "2.0.18"
+darling = "0.20.3"
+proc-macro2 = "1.0.70"
+quote = "1.0.33"
+syn = "2.0.41"

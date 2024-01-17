@@ -11,6 +11,16 @@ pub enum WWSVCError {
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::MissingCredentials))]
     MissingCredentials,
 
+    /// Header value contained non-ASCII characters.
+    #[error("Header value contained non-ASCII characters.")]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::HeaderValueToStrError))]
+    HeaderValueToStrError,
+
+    /// Invalid header name or value.
+    #[error("Invalid header name or value.")]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::InvalidHeader))]
+    InvalidHeader,
+
     /// The request to the server has failed.
     #[error(transparent)]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::ReqwestError))]
@@ -20,16 +30,6 @@ pub enum WWSVCError {
     #[error(transparent)]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::InvalidHeaderValue))]
     InvalidHeaderValue(#[from] reqwest::header::InvalidHeaderValue),
-
-    /// A generic HTTP error has occurred.
-    #[error(transparent)]
-    #[diagnostic(code(wwsvc_rs::error::WWSVCError::HttpError))]
-    HttpError(#[from] http::Error),
-
-    /// Header value contains non-ASCII characters.
-    #[error(transparent)]
-    #[diagnostic(code(wwsvc_rs::error::WWSVCError::HeaderValueToStrError))]
-    HeaderValueToStrError(#[from] http::header::ToStrError),
 
     /// Url parsing error.
     #[error(transparent)]

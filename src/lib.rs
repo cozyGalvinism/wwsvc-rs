@@ -8,10 +8,10 @@
 //!
 //! ## Usage
 //!
-//! ```rust
+//! ```no_run
 //! use wwsvc_rs::{WebwareClient, Unregistered, WWSVCGetData, collection};
 //!
-//! #[derive(WWSVCGetData, Debug, serde::Deserialize)]
+//! #[derive(WWSVCGetData, Debug, Clone, serde::Deserialize)]
 //! #[wwsvc(function = "ARTIKEL")]
 //! pub struct ArticleData {
 //!     #[serde(rename = "ART_1_25")]
@@ -29,7 +29,7 @@
 //!         .build();
 //!     let mut registered_client = client.register().await.expect("failed to register");
 //!     let articles = ArticleData::get(&mut registered_client, collection! {
-//!         "ARTNR" => "1004208001",
+//!         "ARTNR" => "Artikel19Prozent",
 //!     }).await;
 //!     println!("{:#?}", articles);
 //! }
@@ -76,6 +76,7 @@ pub mod client;
 pub use client::states::*;
 pub use client::WebwareClient;
 pub use credentials::Credentials;
+pub use error::WWSVCError;
 pub use reqwest::Response;
 
 /// Result type for the wwsvc-rs crate.

@@ -6,7 +6,7 @@
 
 extern crate proc_macro;
 
-use darling::{FromDeriveInput, FromField};
+use darling::{FromDeriveInput, FromField, FromMeta};
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, DeriveInput};
@@ -19,10 +19,45 @@ struct WWSVCGetAttributes {
     version: Option<u32>,
 }
 
+struct RenameField(String);
+
+impl FromMeta for RenameField {
+    fn from_string(value: &str) -> darling::Result<Self> {
+        Ok(RenameField(value.to_string()))
+    }
+
+    fn from_list(items: &[darling::ast::NestedMeta]) -> darling::Result<Self> {
+        let mut rename = None;
+        for item in items {
+            if let darling::ast::NestedMeta::Meta(syn::Meta::NameValue(syn::MetaNameValue {
+                path,
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(lit_str),
+                        ..
+                    }),
+                ..
+            })) = item
+            {
+                if path.is_ident("deserialize") {
+                    rename = Some(lit_str.value());
+                }
+            }
+        }
+        if let Some(rename) = rename {
+            Ok(RenameField(rename))
+        } else {
+            Err(darling::Error::custom(
+                "serde(rename) requires a deserialize rename",
+            ))
+        }
+    }
+}
+
 #[derive(FromField)]
 #[darling(attributes(serde), allow_unknown_fields)]
 struct WWSVCGetFieldAttributes {
-    rename: String,
+    rename: RenameField,
 }
 
 /// Generates a response and a container struct based on the name of the struct and the function name.
@@ -71,7 +106,11 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
     let response_ident = syn::Ident::new(&response_type, name.span());
     let container_ident = syn::Ident::new(&container_type, name.span());
     // collect fields to comma separated string
-    let available_fields = fields.join(",");
+    let available_fields = fields
+        .into_iter()
+        .map(|field| field.0)
+        .collect::<Vec<_>>()
+        .join(",");
 
     let function_version = if let Some(version) = version {
         quote! {

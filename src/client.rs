@@ -292,7 +292,7 @@ impl<State: Ready> WebwareClient<State> {
             );
         }
 
-        Ok((&headers).try_into()?)
+        (&headers).try_into().map_err(|_| WWSVCError::InvalidHeader)
     }
 
     /// Returns the same set of headers, that `get_default_headers()` returns, except the result type header is set to `BIN` instead.
@@ -375,11 +375,13 @@ impl<State: Ready> WebwareClient<State> {
         let timestamp_header = headers.get("WWSVC-TS");
         let app_hash: String = app_hash_header
             .unwrap_or(&HeaderValue::from_str("").unwrap())
-            .to_str()?
+            .to_str()
+            .map_err(|_| WWSVCError::HeaderValueToStrError)?
             .to_string();
         let timestamp: String = timestamp_header
             .unwrap_or(&HeaderValue::from_str("").unwrap())
-            .to_str()?
+            .to_str()
+            .map_err(|_| WWSVCError::HeaderValueToStrError)?
             .to_string();
 
         for (p_key, p_value) in parameters {
@@ -467,128 +469,5 @@ impl WebwareClient<OpenCursor> {
     /// Returns None, if no cursor is available.
     pub fn cursor_closed(&self) -> bool {
         self.cursor.as_ref().unwrap().closed()
-    }
-
-    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
-    #[cfg(feature = "stream")]
-    /// Performs a request using a cursor and returns a stream of JSON values.
-    ///
-    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_stream<'a>(
-        mut self,
-        method: reqwest::Method,
-        function: &'a str,
-        version: u32,
-        parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>,
-    ) -> (
-        WebwareClient<Registered>,
-        impl futures_core::Stream<Item = WWClientResult<serde_json::Value>> + 'a,
-    ) {
-        let consumed_client = WebwareClient {
-            webware_url: self.webware_url.clone(),
-            vendor_hash: self.vendor_hash.clone(),
-            app_hash: self.app_hash.clone(),
-            secret: self.secret.clone(),
-            revision: self.revision,
-            credentials: self.credentials.clone(),
-            result_max_lines: self.result_max_lines,
-            cursor: None,
-            current_request: self.current_request,
-            client: self.client.clone(),
-            suspend_cursor: self.suspend_cursor,
-            state: std::marker::PhantomData::<Registered>,
-        };
-        let stream = async_stream::stream! {
-            while !self.cursor_closed() {
-                let response = self.request(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
-                yield response;
-            }
-        };
-
-        (consumed_client, stream)
-    }
-
-    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
-    #[cfg(feature = "stream")]
-    /// Performs a request to the WEBSERVICES using a cursor and returns a stream of response objects.
-    ///
-    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_as_response_stream<'a>(
-        mut self,
-        method: reqwest::Method,
-        function: &'a str,
-        version: u32,
-        parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>,
-    ) -> (
-        WebwareClient<Registered>,
-        impl futures_core::Stream<Item = WWClientResult<Response>> + 'a,
-    ) {
-        let consumed_client = WebwareClient {
-            webware_url: self.webware_url.clone(),
-            vendor_hash: self.vendor_hash.clone(),
-            app_hash: self.app_hash.clone(),
-            secret: self.secret.clone(),
-            revision: self.revision,
-            credentials: self.credentials.clone(),
-            result_max_lines: self.result_max_lines,
-            cursor: None,
-            current_request: self.current_request,
-            client: self.client.clone(),
-            suspend_cursor: self.suspend_cursor,
-            state: std::marker::PhantomData::<Registered>,
-        };
-        let stream = async_stream::stream! {
-            while !self.cursor_closed() {
-                let response = self.request_as_response(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
-                yield response;
-            }
-        };
-
-        (consumed_client, stream)
-    }
-
-    #[cfg_attr(docsrs, doc(cfg(feature = "stream")))]
-    #[cfg(feature = "stream")]
-    /// Performs a request to the WEBSERVICES using a cursor and deserializes the response to the type `T`.
-    ///
-    /// Also returns a client object with the `Registered` state, which can be used to perform further requests.
-    pub async fn request_generic_stream<'a, T>(
-        mut self,
-        method: reqwest::Method,
-        function: &'a str,
-        version: u32,
-        parameters: HashMap<&'a str, &'a str>,
-        additional_headers: Option<HashMap<&'a str, &'a str>>,
-    ) -> (
-        WebwareClient<Registered>,
-        impl futures_core::Stream<Item = WWClientResult<T>> + 'a,
-    )
-    where
-        T: DeserializeOwned + 'a,
-    {
-        let consumed_client = WebwareClient {
-            webware_url: self.webware_url.clone(),
-            vendor_hash: self.vendor_hash.clone(),
-            app_hash: self.app_hash.clone(),
-            secret: self.secret.clone(),
-            revision: self.revision,
-            credentials: self.credentials.clone(),
-            result_max_lines: self.result_max_lines,
-            cursor: None,
-            current_request: self.current_request,
-            client: self.client.clone(),
-            suspend_cursor: self.suspend_cursor,
-            state: std::marker::PhantomData::<Registered>,
-        };
-        let stream = async_stream::stream! {
-            while !self.cursor_closed() {
-                let response = self.request_generic(method.clone(), function, version, parameters.clone(), additional_headers.clone()).await;
-                yield response;
-            }
-        };
-
-        (consumed_client, stream)
     }
 }

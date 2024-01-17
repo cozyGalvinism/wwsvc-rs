@@ -8,7 +8,7 @@ pub struct ArticleData {
 }
 
 #[tokio::test]
-async fn test_derive() {
+async fn test_articles() {
     dotenv::from_filename("tests/.env").ok();
 
     let client = wwsvc_rs::WebwareClient::builder()
@@ -25,7 +25,7 @@ async fn test_derive() {
     let articles = ArticleData::get(
         &mut registered_client,
         collection! {
-            "ARTNR" => "1004208001",
+            "ARTNR" => std::env::var("TEST_ARTNR").unwrap().as_str(),
         },
     )
     .await
@@ -34,7 +34,7 @@ async fn test_derive() {
     assert!(articles.container.list.is_some());
     let list = articles.container.list.unwrap();
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].article_number, "1004208001");
+    assert_eq!(list[0].article_number, std::env::var("TEST_ARTNR").unwrap().as_str());
 
     registered_client.deregister().await.unwrap();
 }

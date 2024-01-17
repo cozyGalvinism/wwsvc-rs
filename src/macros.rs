@@ -5,13 +5,15 @@
 /// Generating a response struct for an IDB GET request:
 ///
 /// ```
+/// use wwsvc_rs::generate_get_response;
+///
 /// generate_get_response!(TrackingResponse, "IDBID0026LISTE", TrackingListe, "IDBID0026");
 /// ```
 #[macro_export]
 macro_rules! generate_get_response {
     ($name:ident, $container_name:literal, $container_type:ident, $list_name:literal) => {
         /// Generic response struct for a WWSVC GET request.
-        #[derive(Deserialize, Clone)]
+        #[derive(serde::Deserialize, Clone)]
         pub struct $name<T> {
             /// The COMRESULT of the request. Contains information about the status of the request.
             #[serde(rename = "COMRESULT")]
@@ -22,7 +24,7 @@ macro_rules! generate_get_response {
         }
 
         /// Container struct for the list of items.
-        #[derive(Deserialize, Clone)]
+        #[derive(serde::Deserialize, Clone)]
         pub struct $container_type<T> {
             /// The list of items.
             #[serde(rename = $list_name)]
