@@ -3,7 +3,7 @@ members = ["wwsvc-rs-derive"]
 resolver = "2"
 
 [workspace.package]
-version = "3.0.0-pre.19"
+version = "3.0.0-pre.20"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
 license = "MIT"
 repository = "https://github.com/cozyGalvinism/wwsvc-rs"
@@ -36,7 +36,7 @@ thiserror = "1.0.40"
 miette = "5.7.0"
 typed-builder = "0.18.0"
 url = "2.3.1"
-wwsvc-rs-derive = { path = "./wwsvc-rs-derive", optional = true, version = "3.0.0-pre.19" }
+wwsvc-rs-derive = { path = "./wwsvc-rs-derive", optional = true, version = "3.0.0-pre.20" }
 async-trait = { version = "0.1.68", optional = true }
 
 [features]
