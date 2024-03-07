@@ -83,6 +83,10 @@ async fn main() {
 
 ```
 
+## Safety
+
+This project uses `#![forbid(unsafe_code)]` to ensure everything is implemented in 100% safe Rust.
+
 ## Versioning
 
 This project adheres to [semantic versioning](https://semver.org/).

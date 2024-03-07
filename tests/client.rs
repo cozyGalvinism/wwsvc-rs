@@ -1,5 +1,6 @@
+use futures::FutureExt;
 use reqwest::Method;
-use wwsvc_rs::{collection, WWSVCGetData, generate_get_response};
+use wwsvc_rs::{collection, generate_get_response};
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct ArticleData {
@@ -22,18 +23,32 @@ async fn test_articles() {
         .allow_insecure(true)
         .build();
 
-    let mut registered_client = client.register().await.unwrap();
-
-    let articles = registered_client.request_generic::<ArticleResponse<ArticleData>>(Method::PUT, "ARTIKEL.GET", 1, collection! {
-        "ARTNR" => std::env::var("TEST_ARTNR").unwrap().as_str(),
-    }, None)
+    let articles = client
+        .with_registered(|registered_client| {
+            async {
+                registered_client
+                    .request_generic::<ArticleResponse<ArticleData>>(
+                        Method::PUT,
+                        "ARTIKEL.GET",
+                        1,
+                        collection! {
+                            "ARTNR" => std::env::var("TEST_ARTNR").unwrap().as_str(),
+                        },
+                        None,
+                    )
+                    .await
+            }
+            .boxed()
+        })
         .await
+        .unwrap()
         .unwrap();
 
     assert!(articles.container.list.is_some());
     let list = articles.container.list.unwrap();
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].article_number, std::env::var("TEST_ARTNR").unwrap().as_str());
-
-    registered_client.deregister().await.unwrap();
+    assert_eq!(
+        list[0].article_number,
+        std::env::var("TEST_ARTNR").unwrap().as_str()
+    );
 }

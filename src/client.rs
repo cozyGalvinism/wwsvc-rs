@@ -1,3 +1,4 @@
+use futures::future::BoxFuture;
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::Response;
 use serde::de::DeserializeOwned;
@@ -210,6 +211,41 @@ impl WebwareClient {
             suspend_cursor: self.suspend_cursor,
             state: std::marker::PhantomData::<Registered>,
         })
+    }
+
+    /// Provides a harness for operating with the client by registering, running the provided closure and then deregistering
+    /// the client.
+    ///
+    /// ## Example
+    ///
+    /// ```rust,no_run
+    /// use wwsvc_rs::futures::FutureExt;
+    ///
+    /// #[tokio::main]
+    /// async fn main() {
+    ///     let client = wwsvc_rs::WebwareClient::builder()
+    ///            .webware_url("https://meine-webware.de")
+    ///            .vendor_hash("my-vendor-hash")
+    ///            .app_hash("my-app-hash")
+    ///            .secret("1")
+    ///            .revision(1)
+    ///            .build();
+    ///
+    ///     let article_result = client
+    ///         .with_registered(|registered_client| async {
+    ///             // Do something with the registered client
+    ///         }.boxed())
+    ///         .await;
+    /// }
+    /// ```
+    pub async fn with_registered<F, T>(self, f: F) -> WWClientResult<T>
+    where
+        F: for<'a> FnOnce(&'a mut WebwareClient<Registered>) -> BoxFuture<'a, T>,
+    {
+        let mut client = self.register().await?;
+        let result = f(&mut client).await;
+        let _ = client.deregister().await?;
+        Ok(result)
     }
 }
 

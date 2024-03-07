@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use wwsvc_rs::{WWSVCGetData, WebwareClient, collection};
+use wwsvc_rs::{collection, WWSVCGetData, WebwareClient};
 
 #[derive(WWSVCGetData, Debug, Deserialize, Clone)]
 #[wwsvc(function = "ARTIKEL")]
@@ -12,7 +12,10 @@ pub struct ArticleData {
 async fn main() {
     let vendor_hash = std::env::var("WW_VENDOR_HASH").expect("WW_VENDOR_HASH not set");
     let app_hash = std::env::var("WW_APP_HASH").expect("WW_APP_HASH not set");
-    let revision = std::env::var("WW_REVISION").expect("WW_REVISION not set").parse().unwrap();
+    let revision = std::env::var("WW_REVISION")
+        .expect("WW_REVISION not set")
+        .parse()
+        .unwrap();
     let secret = std::env::var("WW_SECRET").expect("WW_SECRET not set");
     let webware_url = std::env::var("WW_WEBWARE_URL").expect("WW_WEBWARE_URL not set");
 
@@ -26,10 +29,9 @@ async fn main() {
 
     let mut registered_client = client.register().await.expect("failed to register");
 
-    let articles = ArticleData::get(
-        &mut registered_client,
-        collection! {},
-    ).await.unwrap();
+    let articles = ArticleData::get(&mut registered_client, collection! {})
+        .await
+        .unwrap();
 
     println!("{:#?}", articles);
 }

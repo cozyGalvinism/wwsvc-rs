@@ -34,7 +34,10 @@ async fn test_articles() {
     assert!(articles.container.list.is_some());
     let list = articles.container.list.unwrap();
     assert_eq!(list.len(), 1);
-    assert_eq!(list[0].article_number, std::env::var("TEST_ARTNR").unwrap().as_str());
+    assert_eq!(
+        list[0].article_number,
+        std::env::var("TEST_ARTNR").unwrap().as_str()
+    );
 
     registered_client.deregister().await.unwrap();
 }
