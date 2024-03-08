@@ -17,6 +17,10 @@ struct WWSVCGetAttributes {
     function: String,
     #[darling(default)]
     version: Option<u32>,
+    #[darling(default)]
+    list_name: Option<String>,
+    #[darling(default)]
+    container_name: Option<String>,
 }
 
 struct RenameField(String);
@@ -78,7 +82,7 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
 
     let name = &ast.ident;
-    let WWSVCGetAttributes { function, version } =
+    let WWSVCGetAttributes { function, version, list_name, container_name } =
         WWSVCGetAttributes::from_derive_input(&ast).unwrap();
 
     // parse fields and add #[serde(rename = "#name")] to each field
@@ -101,7 +105,14 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
 
     let response_type = format!("{}Response", name);
     let container_type = format!("{}Container", name);
-    let function_list = format!("{}LISTE", function);
+    let function_list = match list_name {
+        Some(name) => name,
+        None => format!("{}LISTE", function),
+    };
+    let container = match container_name {
+        Some(name) => name,
+        None => function.clone(),
+    };
     let full_function_name = format!("{function}.GET");
     let response_ident = syn::Ident::new(&response_type, name.span());
     let container_ident = syn::Ident::new(&container_type, name.span());
@@ -136,7 +147,7 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
         #[derive(serde::Deserialize, Debug, Clone)]
         pub struct #container_ident {
             /// The list of items.
-            #[serde(rename = #function)]
+            #[serde(rename = #container)]
             pub list: Option<Vec<#name>>,
         }
 
