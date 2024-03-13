@@ -344,9 +344,7 @@ impl<State: Ready> WebwareClient<State> {
 
     /// Sends a `DEREGISTER` request to the WEBWARE instance, in order to invalidate the service pass.
     pub async fn deregister(mut self) -> WWClientResult<WebwareClient<Unregistered>> {
-        let credentials = self.credentials.take();
-
-        if let Some(credentials) = credentials {
+        if let Some(credentials) = &self.credentials {
             let target_url = self
                 .webware_url
                 .join("WWSERVICE/")?
