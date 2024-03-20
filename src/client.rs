@@ -113,7 +113,7 @@ impl From<InternalWebwareClient> for WebwareClient<Unregistered> {
             app_hash: client.app_hash,
             secret: client.secret,
             revision: client.revision,
-            credentials: None,
+            credentials: client.credentials,
             result_max_lines: client.result_max_lines,
             cursor: None,
             current_request: 0,
