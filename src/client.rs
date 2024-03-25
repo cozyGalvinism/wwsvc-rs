@@ -53,10 +53,12 @@ pub mod states {
     /// The state of the client
     ///
     /// Unregistered: The client is not registered
+    #[derive(Clone)]
     pub struct Unregistered;
     /// The state of the client
     ///
     /// Registered: The client is registered
+    #[derive(Clone)]
     pub struct Registered;
 
     /// The state of the client
