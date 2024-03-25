@@ -72,6 +72,7 @@ pub mod states {
 }
 
 /// The web client to consume SoftENGINE's WEBSERVICES
+#[derive(Clone)]
 pub struct WebwareClient<State = Unregistered> {
     /// Full URL to the WEBWARE instance
     webware_url: Url,
