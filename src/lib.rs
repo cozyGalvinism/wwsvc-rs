@@ -81,13 +81,6 @@
 //!
 //! ```
 
-extern crate encoding_rs;
-extern crate httpdate;
-extern crate md5;
-extern crate reqwest;
-extern crate serde;
-#[macro_use]
-extern crate serde_json;
 extern crate self as wwsvc_rs;
 
 /// Module containing the app hash, which is needed for each request.
@@ -98,6 +91,8 @@ pub mod cursor;
 pub mod error;
 /// Module containing the macros.
 pub mod macros;
+/// Module containing requests.
+pub mod requests;
 /// Module containing trais.
 pub mod traits;
 

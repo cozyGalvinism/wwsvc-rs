@@ -9,6 +9,7 @@ use url::Url;
 
 use crate::client::states::*;
 use crate::error::WWSVCError;
+use crate::requests::{ExecJsonRequest, ToServiceFunctionParameters};
 use crate::responses::RegisterResponse;
 use crate::{AppHash, Credentials, Cursor, WWClientResult};
 
@@ -373,6 +374,87 @@ impl<State: Ready> WebwareClient<State> {
         })
     }
 
+    /// Prepares a request to the WEBSERVICES.
+    ///
+    /// This will return a `[reqwest::Request]` object, that can be executed using the `execute_request` method.
+    ///
+    /// **NOTE:** This method will also update the internal state of the client, such as the request ID and cursor.
+    pub fn prepare_request(
+        &mut self,
+        method: reqwest::Method,
+        function: &str,
+        version: u32,
+        parameters: HashMap<&str, &str>,
+        additional_headers: Option<HashMap<&str, &str>>,
+    ) -> WWClientResult<reqwest::Request> {
+        if self.credentials.is_none() {
+            return Err(WWSVCError::NotAuthenticated);
+        }
+
+        let target_url = self.webware_url.join("EXECJSON")?;
+        let headers = self.get_default_headers(additional_headers)?;
+        let app_hash_header = headers.get("WWSVC-HASH");
+        let timestamp_header = headers.get("WWSVC-TS");
+        let app_hash: String = app_hash_header
+            .unwrap_or(&HeaderValue::from_str("").unwrap())
+            .to_str()
+            .map_err(|_| WWSVCError::HeaderValueToStrError)?
+            .to_string();
+        let timestamp: String = timestamp_header
+            .unwrap_or(&HeaderValue::from_str("").unwrap())
+            .to_str()
+            .map_err(|_| WWSVCError::HeaderValueToStrError)?
+            .to_string();
+
+        let parameters = parameters.to_service_function_parameters();
+
+        let body = ExecJsonRequest::new(
+            function,
+            parameters,
+            version,
+            &self.credentials.as_ref().unwrap().service_pass,
+            &app_hash,
+            &timestamp,
+            self.current_request,
+        );
+
+        let request = self
+            .client
+            .request(method, target_url)
+            .headers(headers)
+            .json(&body)
+            .build()?;
+
+        Ok(request)
+    }
+
+    /// Executes a prepared request to the WEBSERVICES.
+    ///
+    /// This will execute the prepared request and return a response object.
+    ///
+    /// **NOTE:** This method will also update the internal state of the client, such as the request ID and cursor.
+    pub async fn execute_request(&mut self, request: reqwest::Request) -> WWClientResult<Response> {
+        let response = self.client.execute(request).await?;
+
+        if !self.suspend_cursor {
+            if let Some(cursor) = &mut self.cursor {
+                if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
+                    cursor.set_cursor_id(
+                        response
+                            .headers()
+                            .get("WWSVC-CURSOR")
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .to_string(),
+                    );
+                }
+            }
+        }
+
+        Ok(response)
+    }
+
     /// Performs a request to the WEBSERVICES and returns a JSON value.
     pub async fn request(
         &mut self,
@@ -401,53 +483,9 @@ impl<State: Ready> WebwareClient<State> {
         parameters: HashMap<&str, &str>,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<Response> {
-        if self.credentials.is_none() {
-            return Err(WWSVCError::NotAuthenticated);
-        }
-
-        let target_url = self.webware_url.join("EXECJSON")?;
-        let headers = self.get_default_headers(additional_headers)?;
-        let mut param_vec: Vec<HashMap<String, String>> = Vec::new();
-        let app_hash_header = headers.get("WWSVC-HASH");
-        let timestamp_header = headers.get("WWSVC-TS");
-        let app_hash: String = app_hash_header
-            .unwrap_or(&HeaderValue::from_str("").unwrap())
-            .to_str()
-            .map_err(|_| WWSVCError::HeaderValueToStrError)?
-            .to_string();
-        let timestamp: String = timestamp_header
-            .unwrap_or(&HeaderValue::from_str("").unwrap())
-            .to_str()
-            .map_err(|_| WWSVCError::HeaderValueToStrError)?
-            .to_string();
-
-        for (p_key, p_value) in parameters {
-            let mut map: HashMap<String, String> = HashMap::new();
-            map.insert("PNAME".to_string(), p_key.to_string());
-            map.insert("PCONTENT".to_string(), p_value.to_string());
-            param_vec.push(map);
-        }
-        let body = json!({
-            "WWSVC_FUNCTION": {
-                "FUNCTIONNAME": function,
-                "PARAMETER": param_vec,
-                "REVISION": version
-            },
-            "WWSVC_PASSINFO": {
-                "SERVICEPASS": self.credentials.as_ref().unwrap().service_pass,
-                "APPHASH": app_hash,
-                "TIMESTAMP": timestamp,
-                "REQUESTID": self.current_request,
-                "EXECUTE_MODE": "SYNCHRON"
-            }
-        });
-        let response = self
-            .client
-            .request(method, target_url)
-            .headers(headers)
-            .json(&body)
-            .send()
-            .await?;
+        let request =
+            self.prepare_request(method, function, version, parameters, additional_headers)?;
+        let response = self.client.execute(request).await?;
 
         if !self.suspend_cursor {
             if let Some(cursor) = &mut self.cursor {

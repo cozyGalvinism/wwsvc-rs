@@ -1,3 +1,5 @@
+use reqwest::header::ToStrError;
+
 /// Error type for the wwsvc-rs crate.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 pub enum WWSVCError {
@@ -35,4 +37,19 @@ pub enum WWSVCError {
     #[error(transparent)]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::UrlParseError))]
     UrlParseError(#[from] url::ParseError),
+
+    /// Io error.
+    #[error(transparent)]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::IoError))]
+    IoError(#[from] std::io::Error),
+
+    /// Fmt error
+    #[error(transparent)]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::FmtError))]
+    FmtError(#[from] std::fmt::Error),
+
+    /// ToStr error
+    #[error(transparent)]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::ToStrError))]
+    ToStrError(#[from] ToStrError),
 }
