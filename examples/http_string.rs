@@ -23,7 +23,7 @@ async fn main() {
         .credentials(Credentials::new(&service_pass, &app_id))
         .build();
 
-    let mut registered_client = client.register().await.expect("failed to register");
+    let registered_client = client.register().await.expect("failed to register");
 
     let request = registered_client
         .prepare_request(
@@ -33,6 +33,7 @@ async fn main() {
             wwsvc_rs::collection! {"FELDER" => "ART_1_25"},
             None,
         )
+        .await
         .expect("invalid request");
 
     println!("{}", request.to_http_string().unwrap());

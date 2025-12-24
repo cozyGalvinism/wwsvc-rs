@@ -4,6 +4,8 @@ use reqwest::Response;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 use typed_builder::TypedBuilder;
 use url::Url;
 
@@ -62,16 +64,23 @@ pub mod states {
     #[derive(Clone)]
     pub struct Registered;
 
-    /// The state of the client
-    ///
-    /// Cursor: The client is registered and has a cursor
-    pub struct OpenCursor;
-
     /// Marker trait for a ready client
-    pub trait Ready {}
+    pub trait Ready: Send + Sync {}
 
     impl Ready for Registered {}
-    impl Ready for OpenCursor {}
+}
+
+/// Contains mutable state that requires interior mutability
+#[derive(Debug)]
+struct MutableClientState {
+    /// Maximum amount of objects that are returned in a request
+    result_max_lines: u32,
+    /// Request cursor for pagination,
+    cursor: Option<Cursor>,
+    /// Current request ID
+    current_request: u32,
+    /// Suspend the cursor
+    suspend_cursor: bool,
 }
 
 /// The web client to consume SoftENGINE's WEBSERVICES
@@ -89,16 +98,10 @@ pub struct WebwareClient<State = Unregistered> {
     revision: u32,
     /// Credentials of the client
     credentials: Option<Credentials>,
-    /// Maximum amount of objects that are returned in a request
-    result_max_lines: u32,
-    /// Request cursor for pagination,
-    cursor: Option<Cursor>,
-    /// Current request ID
-    current_request: u32,
+    /// Mutable state protected by a mutex for interior mutability
+    mutable_state: Arc<Mutex<MutableClientState>>,
     /// The client
     client: reqwest::Client,
-    /// Suspend the cursor
-    suspend_cursor: bool,
 
     state: std::marker::PhantomData<State>,
 }
@@ -118,11 +121,13 @@ impl From<InternalWebwareClient> for WebwareClient<Unregistered> {
             secret: client.secret,
             revision: client.revision,
             credentials: client.credentials,
-            result_max_lines: client.result_max_lines,
-            cursor: None,
-            current_request: 0,
+            mutable_state: Arc::new(Mutex::new(MutableClientState {
+                result_max_lines: client.result_max_lines,
+                cursor: None,
+                current_request: 0,
+                suspend_cursor: false,
+            })),
             client: req_client,
-            suspend_cursor: false,
             state: std::marker::PhantomData::<Unregistered>,
         }
     }
@@ -149,11 +154,13 @@ impl TryFrom<InternalWebwareClient> for WebwareClient<Registered> {
             secret: client.secret,
             revision: client.revision,
             credentials: client.credentials,
-            result_max_lines: client.result_max_lines,
-            cursor: None,
-            current_request: 0,
+            mutable_state: Arc::new(Mutex::new(MutableClientState {
+                result_max_lines: client.result_max_lines,
+                cursor: None,
+                current_request: 0,
+                suspend_cursor: false,
+            })),
             client: req_client,
-            suspend_cursor: false,
             state: std::marker::PhantomData::<Registered>,
         })
     }
@@ -176,11 +183,8 @@ impl WebwareClient {
                 secret: self.secret,
                 revision: self.revision,
                 credentials: self.credentials,
-                result_max_lines: self.result_max_lines,
-                cursor: self.cursor,
-                current_request: self.current_request,
+                mutable_state: self.mutable_state,
                 client: self.client,
-                suspend_cursor: self.suspend_cursor,
                 state: std::marker::PhantomData::<Registered>,
             });
         }
@@ -208,11 +212,8 @@ impl WebwareClient {
                 service_pass: response_obj.service_pass.pass_id,
                 app_id: response_obj.service_pass.app_id,
             }),
-            result_max_lines: self.result_max_lines,
-            cursor: self.cursor,
-            current_request: self.current_request,
+            mutable_state: self.mutable_state,
             client: self.client,
-            suspend_cursor: self.suspend_cursor,
             state: std::marker::PhantomData::<Registered>,
         })
     }
@@ -244,10 +245,10 @@ impl WebwareClient {
     /// ```
     pub async fn with_registered<F, T>(self, f: F) -> WWClientResult<T>
     where
-        F: for<'a> FnOnce(&'a mut WebwareClient<Registered>) -> BoxFuture<'a, T>,
+        F: for<'a> FnOnce(&'a WebwareClient<Registered>) -> BoxFuture<'a, T>,
     {
-        let mut client = self.register().await?;
-        let result = f(&mut client).await;
+        let client = self.register().await?;
+        let result = f(&client).await;
         let _ = client.deregister().await?;
         Ok(result)
     }
@@ -255,22 +256,23 @@ impl WebwareClient {
 
 impl<State: Ready> WebwareClient<State> {
     /// Creates a new pagination cursor and makes it available for the next requests (until it is closed)
-    pub fn create_cursor(self, max_lines: u32) -> WebwareClient<OpenCursor> {
+    pub async fn create_cursor(&self, max_lines: u32) {
         let cursor = Cursor::new(max_lines);
-        WebwareClient {
-            webware_url: self.webware_url,
-            vendor_hash: self.vendor_hash,
-            app_hash: self.app_hash,
-            secret: self.secret,
-            revision: self.revision,
-            credentials: self.credentials,
-            result_max_lines: self.result_max_lines,
-            cursor: Some(cursor),
-            current_request: self.current_request,
-            client: self.client,
-            suspend_cursor: self.suspend_cursor,
-            state: std::marker::PhantomData::<OpenCursor>,
-        }
+        let mut state = self.mutable_state.lock().await;
+        state.cursor = Some(cursor);
+        state.result_max_lines = max_lines;
+    }
+
+    /// Closes the current cursor, if any, and removes it from the client
+    pub async fn close_cursor(&self) {
+        let mut state = self.mutable_state.lock().await;
+        state.cursor = None;
+    }
+
+    /// Returns whether the client currently has a cursor
+    pub async fn has_cursor(&self) -> bool {
+        let state = self.mutable_state.lock().await;
+        state.cursor.is_some()
     }
 
     /// Generates a set of credentials from the current client.
@@ -279,18 +281,20 @@ impl<State: Ready> WebwareClient<State> {
     }
 
     /// Sets the maximum amount of results that are returned in a response
-    pub fn set_result_max_lines(&mut self, max_lines: u32) {
-        self.result_max_lines = max_lines;
+    pub async fn set_result_max_lines(&self, max_lines: u32) {
+        let mut state = self.mutable_state.lock().await;
+        state.result_max_lines = max_lines;
     }
 
     /// Returns a set of headers, that are required on all requests to the WEBSERVICES (except `REGISTER`).
     ///
     /// This will automatically append necessary authentication headers and increase the request ID, if `register()` was successful.
-    pub fn get_default_headers(
-        &mut self,
+    pub async fn get_default_headers(
+        &self,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<HeaderMap> {
-        let mut max_lines = self.result_max_lines;
+        let mut state = self.mutable_state.lock().await;
+        let mut max_lines = state.result_max_lines;
 
         let mut header_vec = vec![
             ("WWSVC-EXECUTE-MODE", "SYNCHRON".to_string()),
@@ -298,17 +302,17 @@ impl<State: Ready> WebwareClient<State> {
         ];
 
         if let Some(credentials) = &self.credentials {
-            let app_hash = AppHash::new(self.current_request, &credentials.app_id);
-            self.current_request = app_hash.request_id;
+            let app_hash = AppHash::new(state.current_request, &credentials.app_id);
+            state.current_request = app_hash.request_id;
             header_vec.append(&mut vec![
-                ("WWSVC-REQID", format!("{}", self.current_request)),
+                ("WWSVC-REQID", format!("{}", state.current_request)),
                 ("WWSVC-TS", app_hash.date_formatted.to_string()),
                 ("WWSVC-HASH", format!("{:x}", app_hash)),
             ]);
 
-            if !self.suspend_cursor {
-                if let Some(cursor) = &self.cursor {
-                    if !cursor.closed() {
+            if !state.suspend_cursor {
+                if let Some(cursor) = &state.cursor {
+                    if !Cursor::closed(cursor) {
                         header_vec
                             .append(&mut vec![("WWSVC-CURSOR", cursor.cursor_id.to_string())]);
                         max_lines = cursor.max_lines;
@@ -336,25 +340,25 @@ impl<State: Ready> WebwareClient<State> {
     }
 
     /// Returns the same set of headers, that `get_default_headers()` returns, except the result type header is set to `BIN` instead.
-    pub fn get_bin_headers(
-        &mut self,
+    pub async fn get_bin_headers(
+        &self,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<HeaderMap> {
-        let mut headers = self.get_default_headers(additional_headers)?;
+        let mut headers = self.get_default_headers(additional_headers).await?;
         headers.remove("WWSVC-ACCEPT-RESULT-TYPE");
         headers.append("WWSVC-ACCEPT-RESULT-TYPE", HeaderValue::from_str("BIN")?);
         Ok(headers)
     }
 
     /// Sends a `DEREGISTER` request to the WEBWARE instance, in order to invalidate the service pass.
-    pub async fn deregister(mut self) -> WWClientResult<WebwareClient<Unregistered>> {
+    pub async fn deregister(self) -> WWClientResult<WebwareClient<Unregistered>> {
         if let Some(credentials) = &self.credentials {
             let target_url = self
                 .webware_url
                 .join("WWSERVICE/")?
                 .join("DEREGISTER/")?
                 .join(&format!("{}/", &credentials.service_pass))?;
-            let headers = self.get_default_headers(None)?;
+            let headers = self.get_default_headers(None).await?;
             let _ = self.client.get(target_url).headers(headers).send().await;
         }
 
@@ -365,11 +369,8 @@ impl<State: Ready> WebwareClient<State> {
             secret: self.secret,
             revision: self.revision,
             credentials: None,
-            result_max_lines: self.result_max_lines,
-            cursor: self.cursor,
-            current_request: self.current_request,
+            mutable_state: self.mutable_state,
             client: self.client,
-            suspend_cursor: self.suspend_cursor,
             state: std::marker::PhantomData::<Unregistered>,
         })
     }
@@ -379,8 +380,8 @@ impl<State: Ready> WebwareClient<State> {
     /// This will return a `[reqwest::Request]` object, that can be executed using the `execute_request` method.
     ///
     /// **NOTE:** This method will also update the internal state of the client, such as the request ID and cursor.
-    pub fn prepare_request(
-        &mut self,
+    pub async fn prepare_request(
+        &self,
         method: reqwest::Method,
         function: &str,
         version: u32,
@@ -392,7 +393,7 @@ impl<State: Ready> WebwareClient<State> {
         }
 
         let target_url = self.webware_url.join("EXECJSON")?;
-        let headers = self.get_default_headers(additional_headers)?;
+        let headers = self.get_default_headers(additional_headers).await?;
         let app_hash_header = headers.get("WWSVC-HASH");
         let timestamp_header = headers.get("WWSVC-TS");
         let app_hash: String = app_hash_header
@@ -407,6 +408,10 @@ impl<State: Ready> WebwareClient<State> {
             .to_string();
 
         let parameters = parameters.to_service_function_parameters();
+        let current_request = {
+            let state = self.mutable_state.lock().await;
+            state.current_request
+        };
 
         let body = ExecJsonRequest::new(
             function,
@@ -415,7 +420,7 @@ impl<State: Ready> WebwareClient<State> {
             &self.credentials.as_ref().unwrap().service_pass,
             &app_hash,
             &timestamp,
-            self.current_request,
+            current_request,
         );
 
         let request = self
@@ -433,12 +438,13 @@ impl<State: Ready> WebwareClient<State> {
     /// This will execute the prepared request and return a response object.
     ///
     /// **NOTE:** This method will also update the internal state of the client, such as the request ID and cursor.
-    pub async fn execute_request(&mut self, request: reqwest::Request) -> WWClientResult<Response> {
+    pub async fn execute_request(&self, request: reqwest::Request) -> WWClientResult<Response> {
         let response = self.client.execute(request).await?;
 
-        if !self.suspend_cursor {
-            if let Some(cursor) = &mut self.cursor {
-                if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
+        let mut state = self.mutable_state.lock().await;
+        if !state.suspend_cursor {
+            if let Some(cursor) = &mut state.cursor {
+                if !Cursor::closed(cursor) && response.headers().contains_key("WWSVC-CURSOR") {
                     cursor.set_cursor_id(
                         response
                             .headers()
@@ -457,7 +463,7 @@ impl<State: Ready> WebwareClient<State> {
 
     /// Performs a request to the WEBSERVICES and returns a JSON value.
     pub async fn request(
-        &mut self,
+        &self,
         method: reqwest::Method,
         function: &str,
         version: u32,
@@ -476,7 +482,7 @@ impl<State: Ready> WebwareClient<State> {
 
     /// Performs a request to the WEBSERVICES and returns a response object.
     pub async fn request_as_response(
-        &mut self,
+        &self,
         method: reqwest::Method,
         function: &str,
         version: u32,
@@ -484,12 +490,13 @@ impl<State: Ready> WebwareClient<State> {
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<Response> {
         let request =
-            self.prepare_request(method, function, version, parameters, additional_headers)?;
+            self.prepare_request(method, function, version, parameters, additional_headers).await?;
         let response = self.client.execute(request).await?;
 
-        if !self.suspend_cursor {
-            if let Some(cursor) = &mut self.cursor {
-                if !cursor.closed() && response.headers().contains_key("WWSVC-CURSOR") {
+        let mut state = self.mutable_state.lock().await;
+        if !state.suspend_cursor {
+            if let Some(cursor) = &mut state.cursor {
+                if !Cursor::closed(cursor) && response.headers().contains_key("WWSVC-CURSOR") {
                     cursor.set_cursor_id(
                         response
                             .headers()
@@ -510,7 +517,7 @@ impl<State: Ready> WebwareClient<State> {
     ///
     /// **NOTE:** Due to the nature of the WEBSERVICES, deserialization might fail due to structural issues. In that case, use `request()` instead.
     pub async fn request_generic<T>(
-        &mut self,
+        &self,
         method: reqwest::Method,
         function: &str,
         version: u32,
@@ -526,23 +533,24 @@ impl<State: Ready> WebwareClient<State> {
         let response_obj = response.json::<T>().await?;
         Ok(response_obj)
     }
-}
 
-impl WebwareClient<OpenCursor> {
     /// Suspends the cursor, so that it is not used for the next request
-    pub fn suspend_cursor(&mut self) {
-        self.suspend_cursor = true;
+    pub async fn suspend_cursor(&self) {
+        let mut state = self.mutable_state.lock().await;
+        state.suspend_cursor = true;
     }
 
     /// Resumes the cursor, so that it is used for the next request
-    pub fn resume_cursor(&mut self) {
-        self.suspend_cursor = false;
+    pub async fn resume_cursor(&self) {
+        let mut state = self.mutable_state.lock().await;
+        state.suspend_cursor = false;
     }
 
     /// Returns whether the current cursor is closed.
     ///
-    /// Returns None, if no cursor is available.
-    pub fn cursor_closed(&self) -> bool {
-        self.cursor.as_ref().unwrap().closed()
+    /// Returns true if no cursor exists or if the cursor is closed.
+    pub async fn cursor_closed(&self) -> bool {
+        let state = self.mutable_state.lock().await;
+        state.cursor.as_ref().map_or(true, |c| Cursor::closed(c))
     }
 }

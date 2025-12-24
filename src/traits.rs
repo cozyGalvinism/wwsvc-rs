@@ -23,7 +23,7 @@ pub trait WWSVCGetData {
 
     /// Requests this data from the server.
     async fn get(
-        client: &mut crate::client::WebwareClient<impl Ready + Send>,
+        client: &crate::client::WebwareClient<impl Ready + Send>,
         mut parameters: HashMap<&str, &str>,
     ) -> WWClientResult<Self::Response> {
         parameters.insert("FELDER", Self::FIELDS);
