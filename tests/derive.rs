@@ -1,4 +1,4 @@
-use wwsvc_rs::{collection, WWSVCGetData};
+use wwsvc_rs::{WWSVCGetData, Parameters};
 
 #[derive(WWSVCGetData, Debug, serde::Deserialize, Clone)]
 #[wwsvc(function = "ARTIKEL")]
@@ -9,7 +9,7 @@ pub struct ArticleData {
 
 #[tokio::test]
 async fn test_articles() {
-    dotenv::from_filename("tests/.env").ok();
+    dotenvy::from_filename("tests/.env").ok();
 
     let client = wwsvc_rs::WebwareClient::builder()
         .webware_url(std::env::var("WEBWARE_URL").unwrap().as_str())
@@ -24,9 +24,7 @@ async fn test_articles() {
 
     let articles = ArticleData::get(
         &mut registered_client,
-        collection! {
-            "ARTNR" => std::env::var("TEST_ARTNR").unwrap().as_str(),
-        },
+        Parameters::new().param("ARTNR", std::env::var("TEST_ARTNR").unwrap().as_str()),
     )
     .await
     .unwrap();

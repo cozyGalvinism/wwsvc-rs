@@ -1,6 +1,6 @@
 use reqwest::Method;
 use serde::Deserialize;
-use wwsvc_rs::{collection, generate_get_response, Registered, WebwareClient};
+use wwsvc_rs::{generate_get_response, Parameters, Registered, WebwareClient};
 
 async fn get_json_value(client: &WebwareClient<Registered>) {
     let json_value = client
@@ -8,9 +8,7 @@ async fn get_json_value(client: &WebwareClient<Registered>) {
             Method::PUT,
             "ARTIKEL.GET",
             1,
-            collection! {
-                "FELDER" => "ART_1_25",
-            },
+            Parameters::new().param("FELDER", "ART_1_25"),
             None,
         )
         .await
@@ -33,9 +31,7 @@ async fn get_deserialized_value(client: &WebwareClient<Registered>) {
             Method::PUT,
             "ARTIKEL.GET",
             1,
-            collection! {
-                "FELDER" => "ART_1_25",
-            },
+            Parameters::new().param("FELDER", "ART_1_25"),
             None,
         )
         .await

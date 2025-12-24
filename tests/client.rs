@@ -1,6 +1,6 @@
 use futures::FutureExt;
 use reqwest::Method;
-use wwsvc_rs::{collection, generate_get_response};
+use wwsvc_rs::{generate_get_response, Parameters};
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct ArticleData {
@@ -12,7 +12,7 @@ generate_get_response!(ArticleResponse, "ARTIKELLISTE", ArticleContainer, "ARTIK
 
 #[tokio::test]
 async fn test_articles() {
-    dotenv::from_filename("tests/.env").ok();
+    dotenvy::from_filename("tests/.env").ok();
 
     let client = wwsvc_rs::WebwareClient::builder()
         .webware_url(std::env::var("WEBWARE_URL").unwrap().as_str())
@@ -31,9 +31,7 @@ async fn test_articles() {
                         Method::PUT,
                         "ARTIKEL.GET",
                         1,
-                        collection! {
-                            "ARTNR" => std::env::var("TEST_ARTNR").unwrap().as_str(),
-                        },
+                        Parameters::new().param("ARTNR", std::env::var("TEST_ARTNR").unwrap().as_str()),
                         None,
                     )
                     .await

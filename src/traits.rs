@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-
-use crate::{Ready, WWClientResult};
+use crate::{Ready, WWClientResult, params::Parameters};
 
 /// Trait for the WWSVCGetData derive macro.
 #[cfg(feature = "derive")]
@@ -24,9 +22,9 @@ pub trait WWSVCGetData {
     /// Requests this data from the server.
     async fn get(
         client: &crate::client::WebwareClient<impl Ready + Send>,
-        mut parameters: HashMap<&str, &str>,
+        mut parameters: Parameters,
     ) -> WWClientResult<Self::Response> {
-        parameters.insert("FELDER", Self::FIELDS);
+        parameters = parameters.param("FELDER", Self::FIELDS);
         client
             .request_generic(
                 Self::METHOD,

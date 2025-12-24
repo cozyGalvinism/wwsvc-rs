@@ -11,6 +11,7 @@ use url::Url;
 
 use crate::client::states::*;
 use crate::error::WWSVCError;
+use crate::params::Parameters;
 use crate::requests::{ExecJsonRequest, ToServiceFunctionParameters};
 use crate::responses::RegisterResponse;
 use crate::{AppHash, Credentials, Cursor, WWClientResult};
@@ -385,7 +386,7 @@ impl<State: Ready> WebwareClient<State> {
         method: reqwest::Method,
         function: &str,
         version: u32,
-        parameters: HashMap<&str, &str>,
+        parameters: Parameters,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<reqwest::Request> {
         if self.credentials.is_none() {
@@ -467,7 +468,7 @@ impl<State: Ready> WebwareClient<State> {
         method: reqwest::Method,
         function: &str,
         version: u32,
-        parameters: HashMap<&str, &str>,
+        parameters: Parameters,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<serde_json::Value> {
         self.request_generic::<serde_json::Value>(
@@ -486,7 +487,7 @@ impl<State: Ready> WebwareClient<State> {
         method: reqwest::Method,
         function: &str,
         version: u32,
-        parameters: HashMap<&str, &str>,
+        parameters: Parameters,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<Response> {
         let request =
@@ -521,7 +522,7 @@ impl<State: Ready> WebwareClient<State> {
         method: reqwest::Method,
         function: &str,
         version: u32,
-        parameters: HashMap<&str, &str>,
+        parameters: Parameters,
         additional_headers: Option<HashMap<&str, &str>>,
     ) -> WWClientResult<T>
     where

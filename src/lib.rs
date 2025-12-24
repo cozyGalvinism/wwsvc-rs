@@ -91,6 +91,8 @@ pub mod cursor;
 pub mod error;
 /// Module containing the macros.
 pub mod macros;
+/// Module containing the structure for parameters.
+pub mod params;
 /// Module containing requests.
 pub mod requests;
 /// Module containing trais.
@@ -103,6 +105,7 @@ pub mod responses;
 pub use app_hash::AppHash;
 pub use cursor::Cursor;
 pub use futures;
+pub use params::Parameters;
 pub use reqwest::Method;
 pub use serde_json::Value;
 
