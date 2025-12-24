@@ -12,7 +12,7 @@ use url::Url;
 use crate::client::states::*;
 use crate::error::WWSVCError;
 use crate::params::Parameters;
-use crate::requests::{ExecJsonRequest, ToServiceFunctionParameters};
+use crate::requests::{ExecJsonRequest, RequestToHttpString, ToServiceFunctionParameters};
 use crate::responses::RegisterResponse;
 use crate::{AppHash, Credentials, Cursor, WWClientResult};
 
@@ -297,37 +297,29 @@ impl<State: Ready> WebwareClient<State> {
         let mut state = self.mutable_state.lock().await;
         let mut max_lines = state.result_max_lines;
 
-        let mut header_vec = vec![
-            ("WWSVC-EXECUTE-MODE", "SYNCHRON".to_string()),
-            ("WWSVC-ACCEPT-RESULT-TYPE", "JSON".to_string()),
-        ];
-
+        let mut headers = HashMap::new();
+        
         if let Some(credentials) = &self.credentials {
             let app_hash = AppHash::new(state.current_request, &credentials.app_id);
             state.current_request = app_hash.request_id;
-            header_vec.append(&mut vec![
-                ("WWSVC-REQID", format!("{}", state.current_request)),
-                ("WWSVC-TS", app_hash.date_formatted.to_string()),
-                ("WWSVC-HASH", format!("{:x}", app_hash)),
-            ]);
-
+            
+            headers.insert("WWSVC-REQID".to_string(), format!("{}", state.current_request));
+            headers.insert("WWSVC-TS".to_string(), app_hash.date_formatted.to_string());
+            headers.insert("WWSVC-HASH".to_string(), format!("{:x}", app_hash));
+            
             if !state.suspend_cursor {
                 if let Some(cursor) = &state.cursor {
                     if !Cursor::closed(cursor) {
-                        header_vec
-                            .append(&mut vec![("WWSVC-CURSOR", cursor.cursor_id.to_string())]);
+                        headers.insert("WWSVC-CURSOR".to_string(), cursor.cursor_id.to_string());
                         max_lines = cursor.max_lines;
                     }
                 }
             }
         }
-
-        header_vec.push(("WWSVC-ACCEPT-RESULT-MAX-LINES", max_lines.to_string()));
-
-        let mut headers: HashMap<String, String> = header_vec
-            .iter()
-            .map(|(s1, s2)| (s1.to_string(), s2.to_string()))
-            .collect();
+        
+        headers.insert("WWSVC-EXECUTE-MODE".to_string(), "SYNCHRON".to_string());
+        headers.insert("WWSVC-ACCEPT-RESULT-TYPE".to_string(), "JSON".to_string());
+        headers.insert("WWSVC-ACCEPT-RESULT-MAX-LINES".to_string(), max_lines.to_string());
 
         if let Some(additional_headers) = additional_headers {
             headers.extend(
@@ -492,6 +484,7 @@ impl<State: Ready> WebwareClient<State> {
     ) -> WWClientResult<Response> {
         let request =
             self.prepare_request(method, function, version, parameters, additional_headers).await?;
+        tracing::debug!(request = request.to_http_string().unwrap_or_default(), "send request");
         let response = self.client.execute(request).await?;
 
         let mut state = self.mutable_state.lock().await;

@@ -44,6 +44,7 @@ wwsvc-rs-derive = { path = "./wwsvc-rs-derive", optional = true, version = "3.1.
 async-trait = { version = "0.1", optional = true }
 futures = "0.3"
 tokio = { version = "1.48", features = ["sync"] }
+tracing = "0.1.44"
 
 [features]
 default = ["native-tls"]
@@ -54,3 +55,4 @@ native-tls = ["reqwest/native-tls"]
 [dev-dependencies]
 dotenvy = "0.15"
 tokio = { version = "1.48", features = ["full"] }
+init-tracing-opentelemetry = { version = "0.34", features = ["tracing_subscriber_ext"] }

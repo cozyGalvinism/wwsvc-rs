@@ -20,7 +20,7 @@ macro_rules! generate_get_response {
             pub com_result: $crate::responses::ComResult,
             /// The container struct for the list of items.
             #[serde(rename = $container_name)]
-            pub container: $container_type<T>,
+            pub container: Option<$container_type<T>>,
         }
 
         /// Container struct for the list of items.
@@ -29,6 +29,16 @@ macro_rules! generate_get_response {
             /// The list of items.
             #[serde(rename = $list_name)]
             pub list: Option<Vec<T>>,
+        }
+
+        impl<T> $crate::cursor_response::HasList<T> for $name<T> {
+            fn into_items(self) -> Option<Vec<T>> {
+                if let Some(container) = self.container {
+                    container.list
+                } else {
+                    None
+                }
+            }
         }
     };
 }

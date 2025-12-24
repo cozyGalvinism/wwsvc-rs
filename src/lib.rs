@@ -31,8 +31,8 @@
 //!         .secret("1")
 //!         .revision(1)
 //!         .build();
-//!     let mut registered_client = client.register().await.expect("failed to register");
-//!     let articles = ArticleData::get(&mut registered_client, collection! {
+//!     let registered_client = client.register().await.expect("failed to register");
+//!     let articles = ArticleData::get(&registered_client, collection! {
 //!         "ARTNR" => "Artikel19Prozent",
 //!     }).await;
 //!     println!("{:#?}", articles);
@@ -66,7 +66,7 @@
 //!         .secret("1")
 //!         .revision(1)
 //!         .build();
-//!     let mut registered_client = client.register().await.expect("failed to register");
+//!     let registered_client = client.register().await.expect("failed to register");
 //!
 //!     let articles = registered_client.request_generic::<ArticleResponse<ArticleData>>(Method::PUT, "ARTIKEL.GET", 1, collection! {
 //!         "ARTNR" => "Artikel19Prozent",
@@ -74,7 +74,7 @@
 //!         .await
 //!         .unwrap();
 //!
-//!     println!("{:#?}", articles.container.list.unwrap());
+//!     println!("{:#?}", articles.container.unwrap().list.unwrap());
 //!
 //!     registered_client.deregister().await.unwrap();
 //! }
@@ -91,6 +91,8 @@ pub mod cursor;
 pub mod error;
 /// Module containing the macros.
 pub mod macros;
+/// Module containing cursor response handling.
+pub mod cursor_response;
 /// Module containing the structure for parameters.
 pub mod params;
 /// Module containing requests.
@@ -104,6 +106,7 @@ pub mod responses;
 
 pub use app_hash::AppHash;
 pub use cursor::Cursor;
+pub use cursor_response::{CursoredResponse, CursoredRequests, HasList};
 pub use futures;
 pub use params::Parameters;
 pub use reqwest::Method;

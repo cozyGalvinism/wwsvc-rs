@@ -37,7 +37,7 @@ async fn get_deserialized_value(client: &WebwareClient<Registered>) {
         .await
         .unwrap();
 
-    println!("{:#?}", articles.container.list);
+    println!("{:#?}", articles.container.unwrap().list);
 }
 
 #[tokio::main]

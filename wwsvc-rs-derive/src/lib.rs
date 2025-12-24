@@ -140,7 +140,7 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
             pub com_result: wwsvc_rs::responses::ComResult,
             /// The container struct for the list of items.
             #[serde(rename = #function_list)]
-            pub container: #container_ident,
+            pub container: Option<#container_ident>,
         }
 
         /// Container struct for the list of items.
@@ -159,6 +159,16 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
 
             type Response = #response_ident;
             type Container = #container_ident;
+        }
+
+        impl wwsvc_rs::cursor_response::HasList<#name> for #response_ident {
+            fn into_items(self) -> Option<Vec<#name>> {
+                if let Some(container) = self.container {
+                    container.list
+                } else {
+                    None
+                }
+            }
         }
     };
 
