@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
+use serde::de::DeserializeOwned;
+
+use crate::{CursoredRequests, CursoredResponse, HasList, Registered};
 use crate::{Ready, WWClientResult, params::Parameters};
 
 /// Trait for the WWSVCGetData derive macro.
-#[cfg(feature = "derive")]
 #[wwsvc_rs::async_trait]
-pub trait WWSVCGetData {
+pub trait WWSVCGetData: Sized + Clone + DeserializeOwned {
     /// The function name of the WWSVC request.
     const FUNCTION: &'static str;
     /// The version of the function.
@@ -14,10 +18,10 @@ pub trait WWSVCGetData {
     const FIELDS: &'static str = "";
 
     /// The response type of the WWSVC request.
-    type Response: serde::de::DeserializeOwned;
+    type Response: DeserializeOwned + HasList<Self>;
 
     /// The container type of the WWSVC request.
-    type Container: serde::de::DeserializeOwned;
+    type Container: DeserializeOwned;
 
     /// Requests this data from the server.
     async fn get(
@@ -34,5 +38,15 @@ pub trait WWSVCGetData {
                 None,
             )
             .await
+    }
+
+    /// Requests this data from the server using a cursor.
+    async fn get_cursored(
+        client: Arc<crate::client::WebwareClient<Registered>>,
+        mut parameters: Parameters,
+        max_lines: u32
+    ) -> WWClientResult<CursoredResponse<Self, Self::Response>> {
+        parameters = parameters.param("FELDER", Self::FIELDS);
+        client.cursored_request(Self::METHOD, Self::FUNCTION, Self::VERSION, parameters, max_lines).await
     }
 }

@@ -1,5 +1,4 @@
 use reqwest::Method;
-use tracing::level_filters::LevelFilter;
 use wwsvc_rs::{generate_get_response, Credentials, Parameters};
 
 #[derive(Debug, serde::Deserialize, Clone)]
@@ -14,8 +13,7 @@ generate_get_response!(ArticleResponse, "ARTIKELLISTE", ArticleContainer, "ARTIK
 async fn test_articles() {
     dotenvy::from_filename("tests/.env").ok();
 
-    let _guard = init_tracing_opentelemetry::TracingConfig::debug()
-        .with_default_level(LevelFilter::DEBUG)
+    let _guard = init_tracing_opentelemetry::TracingConfig::testing()
         .init_subscriber()
         .unwrap();
 
