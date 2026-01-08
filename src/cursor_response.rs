@@ -87,7 +87,7 @@ where
     R: DeserializeOwned + HasList<T> + HasComResult,
 {
     /// Fetch the next page of results.
-    /// 
+    ///
     /// Returns None when there are no more pages available.
     pub async fn next_with_comresult(&mut self) -> WWClientResult<Option<ItemsWithComResult<T>>> {
         if self.finished {
@@ -121,7 +121,7 @@ where
 
         // Extract the list using the HasList trait
         let items = response.into_items();
-        
+
         match items {
             Some(ref list) if list.is_empty() => {
                 tracing::warn!(comresult=?comresult, "Empty list received from server, closing cursor");
@@ -137,6 +137,22 @@ where
                 Ok(Some(ItemsWithComResult::no_items(comresult)))
             }
         }
+    }
+
+    /// Collect all remaining pages into a single Vec.
+    ///
+    /// This version uses `next_with_comresult` internally for better tracing
+    /// and debugging output during the collection process.
+    pub async fn collect_all_with_comresult(&mut self) -> WWClientResult<Vec<T>> {
+        let mut all_items = Vec::new();
+
+        while let Some(batch) = self.next_with_comresult().await? {
+            if let Some(items) = batch.items {
+                all_items.extend(items);
+            }
+        }
+
+        Ok(all_items)
     }
 }
 
