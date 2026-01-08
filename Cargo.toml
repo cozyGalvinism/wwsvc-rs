@@ -26,7 +26,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-reqwest = { version = "0.12", features = [
+reqwest = { version = "0.13", features = [
     "json",
     "gzip",
     "deflate",
@@ -49,7 +49,7 @@ tracing = "0.1.44"
 [features]
 default = ["native-tls"]
 derive = ["dep:wwsvc-rs-derive", "dep:async-trait"]
-rustls = ["reqwest/rustls-tls"]
+rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
 
 [dev-dependencies]
