@@ -40,6 +40,12 @@ macro_rules! generate_get_response {
                 }
             }
         }
+
+        impl<T> $crate::cursor_response::HasComResult for $name<T> {
+            fn comresult(&self) -> &wwsvc_rs::responses::ComResult {
+                &self.com_result
+            }
+        }
     };
 }
 

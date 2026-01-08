@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use serde::de::DeserializeOwned;
 
+use crate::cursor_response::HasComResult;
 use crate::{CursoredRequests, CursoredResponse, HasList, Registered};
 use crate::{Ready, WWClientResult, params::Parameters};
 
@@ -18,7 +19,7 @@ pub trait WWSVCGetData: Sized + Clone + DeserializeOwned {
     const FIELDS: &'static str = "";
 
     /// The response type of the WWSVC request.
-    type Response: DeserializeOwned + HasList<Self>;
+    type Response: DeserializeOwned + HasList<Self> + HasComResult;
 
     /// The container type of the WWSVC request.
     type Container: DeserializeOwned;

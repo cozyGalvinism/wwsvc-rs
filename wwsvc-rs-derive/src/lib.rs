@@ -170,6 +170,12 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
                 }
             }
         }
+
+        impl wwsvc_rs::cursor_response::HasComResult for #response_ident {
+            fn comresult(&self) -> &wwsvc_rs::responses::ComResult {
+                &self.com_result
+            }
+        }
     };
 
     gen.into()
