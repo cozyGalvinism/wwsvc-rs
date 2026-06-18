@@ -93,7 +93,7 @@ pub mod error;
 pub mod macros;
 /// Module containing requests.
 pub mod requests;
-/// Module containing trais.
+/// Module containing traits.
 pub mod traits;
 
 mod credentials;
