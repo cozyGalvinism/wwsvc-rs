@@ -83,24 +83,34 @@ pub fn wwsvc_wrapper_derive(input: TokenStream) -> TokenStream {
 
     let name = &ast.ident;
     let WWSVCGetAttributes { function, version, list_name, container_name } =
-        WWSVCGetAttributes::from_derive_input(&ast).unwrap();
+        match WWSVCGetAttributes::from_derive_input(&ast) {
+            Ok(attrs) => attrs,
+            Err(e) => return e.write_errors().into(),
+        };
 
     // parse fields and add #[serde(rename = "#name")] to each field
-    let fields = if let syn::Data::Struct(syn::DataStruct {
-        fields: syn::Fields::Named(syn::FieldsNamed { named: fields, .. }),
-        ..
-    }) = &ast.data
-    {
-        fields
-            .iter()
-            .map(|field| {
-                let WWSVCGetFieldAttributes { rename } = WWSVCGetFieldAttributes::from_field(field)
-                    .expect("WWSVCGetData requires serde renames!");
-                rename
-            })
-            .collect::<Vec<_>>()
-    } else {
-        panic!("WWSVCGetData can only be derived for structs with named fields.");
+    let fields = match &ast.data {
+        syn::Data::Struct(syn::DataStruct {
+            fields: syn::Fields::Named(syn::FieldsNamed { named: fields, .. }),
+            ..
+        }) => {
+            let mut renames = Vec::new();
+            for field in fields {
+                match WWSVCGetFieldAttributes::from_field(field) {
+                    Ok(WWSVCGetFieldAttributes { rename }) => renames.push(rename),
+                    Err(e) => return e.write_errors().into(),
+                }
+            }
+            renames
+        }
+        _ => {
+            return syn::Error::new_spanned(
+                &ast.ident,
+                "WWSVCGetData can only be derived for structs with named fields.",
+            )
+            .to_compile_error()
+            .into();
+        }
     };
 
     let response_type = format!("{}Response", name);

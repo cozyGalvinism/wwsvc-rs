@@ -26,7 +26,7 @@ pub trait WWSVCGetData: Sized + Clone + DeserializeOwned {
 
     /// Requests this data from the server.
     async fn get(
-        client: &crate::client::WebwareClient<impl Ready + Send>,
+        client: &crate::client::WebwareClient<impl Ready>,
         mut parameters: Parameters,
     ) -> WWClientResult<Self::Response> {
         parameters = parameters.param("FELDER", Self::FIELDS);
@@ -42,6 +42,12 @@ pub trait WWSVCGetData: Sized + Clone + DeserializeOwned {
     }
 
     /// Requests this data from the server using a cursor.
+    ///
+    /// Unlike [`get`](Self::get), which takes the client by reference, this takes an
+    /// `Arc<WebwareClient<Registered>>`: the returned [`CursoredResponse`] owns a shared
+    /// client for its whole lifetime, so the client must be wrapped in an [`Arc`] first.
+    ///
+    /// [`CursoredResponse`]: crate::CursoredResponse
     async fn get_cursored(
         client: Arc<crate::client::WebwareClient<Registered>>,
         mut parameters: Parameters,

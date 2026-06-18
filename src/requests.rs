@@ -3,6 +3,7 @@ use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
 
+use crate::consts::EXECUTE_MODE_SYNCHRON;
 use crate::{WWSVCError, params::Parameters};
 
 /// Trait for converting a `reqwest::Request` to a HTTP string.
@@ -51,7 +52,7 @@ impl RequestToHttpString for reqwest::Request {
 
 /// The request body for the `EXECJSON` endpoint.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ExecJsonRequest {
+pub(crate) struct ExecJsonRequest {
     /// The service function to be executed.
     #[serde(rename = "WWSVC_FUNCTION")]
     pub function: ServiceFunction,
@@ -82,7 +83,7 @@ impl ExecJsonRequest {
                 app_hash: app_hash.to_string(),
                 timestamp: timestamp.to_string(),
                 request_id,
-                execute_mode: "SYNCHRON".to_string(),
+                execute_mode: EXECUTE_MODE_SYNCHRON.to_string(),
             },
         }
     }
@@ -90,7 +91,7 @@ impl ExecJsonRequest {
 
 /// The function to be executed.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ServiceFunction {
+pub(crate) struct ServiceFunction {
     /// The name of the function.
     #[serde(rename = "FUNCTIONNAME")]
     pub function_name: String,
@@ -104,7 +105,7 @@ pub struct ServiceFunction {
 
 /// The parameters of the function.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ServiceFunctionParameter {
+pub(crate) struct ServiceFunctionParameter {
     /// The name of the parameter.
     #[serde(rename = "PNAME")]
     pub name: String,
@@ -114,7 +115,7 @@ pub struct ServiceFunctionParameter {
 }
 
 /// Trait for converting a type to a vector of `ServiceFunctionParameter`.
-pub trait ToServiceFunctionParameters {
+pub(crate) trait ToServiceFunctionParameters {
     /// Converts the type to a vector of `ServiceFunctionParameter`.
     fn to_service_function_parameters(&self) -> Vec<ServiceFunctionParameter>;
 }
@@ -157,7 +158,7 @@ impl ToServiceFunctionParameters for Parameters {
 
 /// The authentication info for a request.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct ServicePassInfo {
+pub(crate) struct ServicePassInfo {
     /// The service pass.
     #[serde(rename = "SERVICEPASS")]
     pub service_pass: String,

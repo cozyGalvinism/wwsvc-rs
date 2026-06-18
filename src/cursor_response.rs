@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -5,9 +6,11 @@ use reqwest::Method;
 use serde::de::DeserializeOwned;
 
 use crate::client::states::Registered;
+use crate::consts::{HEADER_CURSOR, HEADER_RESULT_MAX_LINES};
+use crate::cursor::Cursor;
 use crate::params::Parameters;
 use crate::responses::ComResult;
-use crate::{WebwareClient, WWClientResult};
+use crate::{WWClientResult, WebwareClient};
 
 /// Trait for response types that contain a list of items.
 /// This allows CursoredResponse to work with any response structure.
@@ -23,10 +26,12 @@ pub trait HasComResult {
 }
 
 /// A cursor-based response that allows iterating over paginated results.
-/// 
-/// This struct handles the cursor lifecycle internally, providing a simple
-/// interface to fetch pages of results without manually managing cursor state.
-/// 
+///
+/// This struct owns its own pagination cursor and handles the cursor lifecycle internally,
+/// providing a simple interface to fetch pages of results without manually managing cursor
+/// state. Because the cursor lives here (not on the client), you can have multiple
+/// independent cursored responses in flight against the same client.
+///
 /// The generic parameter R represents the full response type (e.g., ArtikelGetResponse).
 pub struct CursoredResponse<T, R>
 where
@@ -38,12 +43,13 @@ where
     version: u32,
     base_params: Parameters,
     page_size: u32,
+    cursor: Cursor,
     _phantom: PhantomData<(T, R)>,
     finished: bool,
 }
 
 /// A wrapper that combines a list of items with their associated COMRESULT.
-/// 
+///
 /// This struct is useful when you need access to both the data items and the
 /// metadata from the COMRESULT (such as status codes, messages, or other
 /// response information) in a single structure.
@@ -56,9 +62,9 @@ pub struct ItemsWithComResult<T: Clone> {
 
 impl<T: Clone> ItemsWithComResult<T> {
     /// Creates a new ItemsWithComResult with the provided items and COMRESULT.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `items` - A slice of items to include in the response
     /// * `comresult` - The COMRESULT from the server response
     pub fn items(items: &[T], comresult: ComResult) -> Self {
@@ -69,9 +75,9 @@ impl<T: Clone> ItemsWithComResult<T> {
     }
 
     /// Creates a new ItemsWithComResult with no items and the provided COMRESULT.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `comresult` - The COMRESULT from the server response
     pub fn no_items(comresult: ComResult) -> Self {
         Self {
@@ -85,81 +91,6 @@ impl<T, R> CursoredResponse<T, R>
 where
     T: DeserializeOwned + Clone,
     R: DeserializeOwned + HasList<T> + HasComResult,
-{
-    /// Fetch the next page of results.
-    ///
-    /// Returns None when there are no more pages available.
-    pub async fn next_with_comresult(&mut self) -> WWClientResult<Option<ItemsWithComResult<T>>> {
-        if self.finished {
-            return Ok(None);
-        }
-
-        // Create a cursor if this is the first request
-        if !self.client.has_cursor().await {
-            self.client.create_cursor(self.page_size).await;
-        }
-
-        // Make the request
-        let response = self
-            .client
-            .request_generic::<R>(
-                self.method.clone(),
-                &self.function,
-                self.version,
-                self.base_params.clone(),
-                None,
-            )
-            .await?;
-        let comresult = response.comresult().clone();
-
-        // Check if cursor is closed
-        if self.client.cursor_closed().await {
-            tracing::debug!(comresult=?comresult, "Cursor closed as indicated by the server");
-            self.finished = true;
-            self.client.close_cursor().await;
-        }
-
-        // Extract the list using the HasList trait
-        let items = response.into_items();
-
-        match items {
-            Some(ref list) if list.is_empty() => {
-                tracing::warn!(comresult=?comresult, "Empty list received from server, closing cursor");
-                self.finished = true;
-                self.client.close_cursor().await;
-                Ok(Some(ItemsWithComResult::no_items(comresult)))
-            }
-            Some(list) => Ok(Some(ItemsWithComResult::items(&list, comresult))),
-            None => {
-                tracing::warn!(comresult=?comresult, "No list received from server, closing cursor");
-                self.finished = true;
-                self.client.close_cursor().await;
-                Ok(Some(ItemsWithComResult::no_items(comresult)))
-            }
-        }
-    }
-
-    /// Collect all remaining pages into a single Vec.
-    ///
-    /// This version uses `next_with_comresult` internally for better tracing
-    /// and debugging output during the collection process.
-    pub async fn collect_all_with_comresult(&mut self) -> WWClientResult<Vec<T>> {
-        let mut all_items = Vec::new();
-
-        while let Some(batch) = self.next_with_comresult().await? {
-            if let Some(items) = batch.items {
-                all_items.extend(items);
-            }
-        }
-
-        Ok(all_items)
-    }
-}
-
-impl<T, R> CursoredResponse<T, R>
-where
-    T: DeserializeOwned + Clone,
-    R: DeserializeOwned + HasList<T>,
 {
     /// Create a new cursored response.
     pub(crate) fn new(
@@ -177,68 +108,115 @@ where
             version,
             base_params,
             page_size,
+            cursor: Cursor::new(),
             _phantom: PhantomData,
             finished: false,
         }
     }
 
-    /// Fetch the next page of results.
-    /// 
-    /// Returns None when there are no more pages available.
-    pub async fn next(&mut self) -> WWClientResult<Option<Vec<T>>> {
+    /// Fetches the next page, sending this response's own cursor and reading the updated
+    /// cursor id back from the response headers.
+    async fn fetch(&mut self) -> WWClientResult<Option<ItemsWithComResult<T>>> {
         if self.finished {
             return Ok(None);
         }
 
-        // Create a cursor if this is the first request
-        if !self.client.has_cursor().await {
-            self.client.create_cursor(self.page_size).await;
-        }
+        // Send this response's cursor id and page size as per-request headers.
+        let page_size = self.page_size.to_string();
+        let mut headers = HashMap::new();
+        headers.insert(HEADER_CURSOR, self.cursor.cursor_id.as_str());
+        headers.insert(HEADER_RESULT_MAX_LINES, page_size.as_str());
 
-        // Make the request
         let response = self
             .client
-            .request_generic::<R>(
+            .request_as_response(
                 self.method.clone(),
                 &self.function,
                 self.version,
                 self.base_params.clone(),
-                None,
+                Some(headers),
             )
             .await?;
 
-        // Check if cursor is closed
-        if self.client.cursor_closed().await {
-            tracing::debug!("Cursor closed as indicated by the server");
-            self.finished = true;
-            self.client.close_cursor().await;
+        // Update our cursor from the response header, if present.
+        if let Some(cursor_id) = response
+            .headers()
+            .get(HEADER_CURSOR)
+            .and_then(|v| v.to_str().ok())
+        {
+            self.cursor.set_cursor_id(cursor_id.to_string());
         }
 
-        // Extract the list using the HasList trait
-        let items = response.into_items();
-        
-        match items {
-            Some(ref list) if list.is_empty() => {
-                tracing::warn!("Empty list received from server, closing cursor");
+        let parsed = response.json::<R>().await?;
+        let comresult = parsed.comresult().clone();
+
+        if self.cursor.closed() {
+            tracing::debug!(comresult = ?comresult, "Cursor closed as indicated by the server");
+            self.finished = true;
+        }
+
+        match parsed.into_items() {
+            Some(list) if list.is_empty() => {
+                tracing::warn!(comresult = ?comresult, "Empty list received from server, closing cursor");
                 self.finished = true;
-                self.client.close_cursor().await;
-                Ok(None)
+                Ok(Some(ItemsWithComResult {
+                    items: None,
+                    comresult,
+                }))
             }
-            Some(list) => Ok(Some(list)),
+            Some(list) => Ok(Some(ItemsWithComResult {
+                items: Some(list),
+                comresult,
+            })),
             None => {
-                tracing::warn!("No list received from server, closing cursor");
+                tracing::warn!(comresult = ?comresult, "No list received from server, closing cursor");
                 self.finished = true;
-                self.client.close_cursor().await;
-                Ok(None)
+                Ok(Some(ItemsWithComResult {
+                    items: None,
+                    comresult,
+                }))
             }
         }
     }
 
+    /// Fetch the next page of results together with its COMRESULT.
+    ///
+    /// Returns None when there are no more pages available.
+    pub async fn next_with_comresult(&mut self) -> WWClientResult<Option<ItemsWithComResult<T>>> {
+        self.fetch().await
+    }
+
+    /// Fetch the next page of results.
+    ///
+    /// Returns None when there are no more pages available.
+    pub async fn next(&mut self) -> WWClientResult<Option<Vec<T>>> {
+        match self.fetch().await? {
+            Some(ItemsWithComResult {
+                items: Some(items), ..
+            }) if !items.is_empty() => Ok(Some(items)),
+            _ => Ok(None),
+        }
+    }
+
     /// Collect all remaining pages into a single Vec.
-    pub async fn collect_all(&mut self) -> WWClientResult<Vec<T>> {
+    pub async fn collect_all(mut self) -> WWClientResult<Vec<T>> {
         let mut all_items = Vec::new();
         while let Some(batch) = self.next().await? {
             all_items.extend(batch);
+        }
+        Ok(all_items)
+    }
+
+    /// Collect all remaining pages into a single Vec.
+    ///
+    /// This version uses `next_with_comresult` internally for better tracing
+    /// and debugging output during the collection process.
+    pub async fn collect_all_with_comresult(mut self) -> WWClientResult<Vec<T>> {
+        let mut all_items = Vec::new();
+        while let Some(batch) = self.next_with_comresult().await? {
+            if let Some(items) = batch.items {
+                all_items.extend(items);
+            }
         }
         Ok(all_items)
     }
@@ -250,13 +228,17 @@ where
 }
 
 /// Extension trait for WebwareClient to provide cursored request methods.
+///
+/// This is implemented for `Arc<WebwareClient<Registered>>` only: a [`CursoredResponse`]
+/// must own a shared client for its whole lifetime, so the client has to be wrapped in an
+/// [`Arc`] first. Calling this on a bare `WebwareClient<Registered>` is a compile error.
 pub trait CursoredRequests {
     /// Make a request that returns a CursoredResponse for paginated results.
-    /// 
+    ///
     /// The generic parameter R represents the full response type.
-    /// 
+    ///
     /// # Arguments
-    /// * `page_size` - Number of rows per page (default: 500)
+    /// * `page_size` - Number of rows per page (required, no default).
     fn cursored_request<T, R>(
         &self,
         method: Method,
@@ -270,49 +252,26 @@ pub trait CursoredRequests {
         R: DeserializeOwned + HasList<T> + HasComResult;
 }
 
-impl CursoredRequests for WebwareClient<Registered> {
-    fn cursored_request<T, R>(
-        &self,
-        _method: Method,
-        _function: &str,
-        _version: u32,
-        _params: Parameters,
-        _page_size: u32,
-    ) -> impl std::future::Future<Output = WWClientResult<CursoredResponse<T, R>>> + Send
-    where
-        T: DeserializeOwned + Clone,
-        R: DeserializeOwned + HasList<T> + HasComResult,
-    {
-        async move {
-            // Cursored requests require an Arc<WebwareClient<Registered>> for shared ownership
-            // Please wrap your client in Arc before calling cursored_request
-            Err(crate::error::WWSVCError::NotAuthenticated)
-        }
-    }
-}
-
 impl CursoredRequests for Arc<WebwareClient<Registered>> {
-    fn cursored_request<T, R>(
+    async fn cursored_request<T, R>(
         &self,
         method: Method,
         function: &str,
         version: u32,
         params: Parameters,
         page_size: u32,
-    ) -> impl std::future::Future<Output = WWClientResult<CursoredResponse<T, R>>> + Send
+    ) -> WWClientResult<CursoredResponse<T, R>>
     where
         T: DeserializeOwned + Clone,
         R: DeserializeOwned + HasList<T> + HasComResult,
     {
-        async move {
-            Ok(CursoredResponse::new(
-                self.clone(),
-                method,
-                function.to_string(),
-                version,
-                params,
-                page_size,
-            ))
-        }
+        Ok(CursoredResponse::new(
+            self.clone(),
+            method,
+            function.to_string(),
+            version,
+            params,
+            page_size,
+        ))
     }
 }

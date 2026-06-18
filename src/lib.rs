@@ -13,7 +13,7 @@
 //! of using this crate.
 //!
 //! ```rust,no_run
-//! use wwsvc_rs::{WebwareClient, Unregistered, WWSVCGetData, collection};
+//! use wwsvc_rs::{WebwareClient, WWSVCGetData, collection};
 //!
 //! #[derive(WWSVCGetData, Debug, Clone, serde::Deserialize)]
 //! #[wwsvc(function = "ARTIKEL")]
@@ -30,7 +30,8 @@
 //!         .app_hash("my-app-hash")
 //!         .secret("1")
 //!         .revision(1)
-//!         .build();
+//!         .build()
+//!         .expect("failed to build client");
 //!     let registered_client = client.register().await.expect("failed to register");
 //!     let articles = ArticleData::get(&registered_client, collection! {
 //!         "ARTNR" => "Artikel19Prozent",
@@ -65,7 +66,8 @@
 //!         .app_hash("my-app-hash")
 //!         .secret("1")
 //!         .revision(1)
-//!         .build();
+//!         .build()
+//!         .expect("failed to build client");
 //!     let registered_client = client.register().await.expect("failed to register");
 //!
 //!     let articles = registered_client.request_generic::<ArticleResponse<ArticleData>>(Method::PUT, "ARTIKEL.GET", 1, collection! {
@@ -83,10 +85,12 @@
 
 extern crate self as wwsvc_rs;
 
-/// Module containing the app hash, which is needed for each request.
-pub mod app_hash;
-/// Module containing the pagination cursor.
-pub mod cursor;
+/// Internal app hash, computed for each request.
+pub(crate) mod app_hash;
+/// Internal pagination cursor.
+pub(crate) mod cursor;
+/// Internal protocol constants.
+pub(crate) mod consts;
 /// Module containing the error type.
 pub mod error;
 /// Module containing the macros.
@@ -97,16 +101,20 @@ pub mod cursor_response;
 pub mod params;
 /// Module containing requests.
 pub mod requests;
-/// Module containing traits.
+/// Module containing the [`traits::WWSVCGetData`] trait.
+///
+/// Only available with the `derive` feature, which provides the derive macro that
+/// implements this trait (and the `async_trait` re-export it relies on).
+#[cfg(feature = "derive")]
 pub mod traits;
 
 mod credentials;
 /// Module containing common response types.
 pub mod responses;
 
-pub use app_hash::AppHash;
-pub use cursor::Cursor;
-pub use cursor_response::{CursoredResponse, CursoredRequests, HasList};
+pub use cursor_response::{
+    CursoredRequests, CursoredResponse, HasComResult, HasList, ItemsWithComResult,
+};
 pub use futures;
 pub use params::Parameters;
 pub use reqwest::Method;

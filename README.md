@@ -15,7 +15,7 @@ Here is an example using the `derive` feature, which is the preferred way
 of using this crate.
 
 ```rust
-use wwsvc_rs::{WebwareClient, Unregistered, WWSVCGetData, collection};
+use wwsvc_rs::{WebwareClient, WWSVCGetData, collection};
 
 #[derive(WWSVCGetData, Debug, Clone, serde::Deserialize)]
 #[wwsvc(function = "ARTIKEL")]
@@ -32,9 +32,10 @@ async fn main() {
         .app_hash("my-app-hash")
         .secret("1")
         .revision(1)
-        .build();
-    let mut registered_client = client.register().await.expect("failed to register");
-    let articles = ArticleData::get(&mut registered_client, collection! {
+        .build()
+        .expect("failed to build client");
+    let registered_client = client.register().await.expect("failed to register");
+    let articles = ArticleData::get(&registered_client, collection! {
         "ARTNR" => "Artikel19Prozent",
     }).await;
     println!("{:#?}", articles);
@@ -48,7 +49,7 @@ to use and reuse. For these purposes, you can directly use the client:
 
 ```rust
 use reqwest::Method;
-use wwsvc_rs::{collection, WWSVCGetData, generate_get_response};
+use wwsvc_rs::{collection, WebwareClient, WWSVCGetData, generate_get_response};
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct ArticleData {
@@ -67,8 +68,9 @@ async fn main() {
         .app_hash("my-app-hash")
         .secret("1")
         .revision(1)
-        .build();
-    let mut registered_client = client.register().await.expect("failed to register");
+        .build()
+        .expect("failed to build client");
+    let registered_client = client.register().await.expect("failed to register");
 
     let articles = registered_client.request_generic::<ArticleResponse<ArticleData>>(Method::PUT, "ARTIKEL.GET", 1, collection! {
         "ARTNR" => "Artikel19Prozent",
@@ -76,7 +78,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("{:#?}", articles.container.list.unwrap());
+    println!("{:#?}", articles.container.unwrap().list.unwrap());
 
     registered_client.deregister().await.unwrap();
 }

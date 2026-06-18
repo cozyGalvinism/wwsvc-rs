@@ -1,3 +1,5 @@
+use crate::consts::{CURSOR_CLOSED, CURSOR_CREATE};
+
 /// Pagination cursor, denoted by a cursor ID.
 ///
 /// In order to create a cursor, simply call `Cursor::new()`.
@@ -6,37 +8,25 @@
 /// Once you send a request containing the cursor, the WEBWARE server returns a new cursor ID.
 /// If there are no more results, the cursor ID will be "CLOSED".
 #[derive(Clone, Debug)]
-pub struct Cursor {
+pub(crate) struct Cursor {
     /// The cursor ID.
     ///
     /// Is "CREATE" if the cursor has just been created.
     /// Is "CLOSED" if there are no more results.
     pub cursor_id: String,
-    /// The maximum amount of results that will be returned.
-    pub max_lines: u32,
-}
-
-impl Default for Cursor {
-    fn default() -> Self {
-        Self {
-            cursor_id: "CREATE".to_string(),
-            max_lines: 500,
-        }
-    }
 }
 
 impl Cursor {
-    /// Creates a new cursor.
-    pub fn new(max_lines: u32) -> Cursor {
+    /// Creates a new cursor, with its id set to "CREATE".
+    pub fn new() -> Cursor {
         Cursor {
-            cursor_id: "CREATE".to_string(),
-            max_lines,
+            cursor_id: CURSOR_CREATE.to_string(),
         }
     }
 
     /// Returns whether the cursor is closed.
     pub fn closed(&self) -> bool {
-        &self.cursor_id == "CLOSED"
+        self.cursor_id == CURSOR_CLOSED
     }
 
     /// Sets the cursor ID.

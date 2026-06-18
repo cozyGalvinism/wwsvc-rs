@@ -13,6 +13,11 @@ pub enum WWSVCError {
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::MissingCredentials))]
     MissingCredentials,
 
+    /// A required builder field was not set.
+    #[error("Missing required builder field: {0}")]
+    #[diagnostic(code(wwsvc_rs::error::WWSVCError::MissingField))]
+    MissingField(&'static str),
+
     /// Header value contained non-ASCII characters.
     #[error("Header value contained non-ASCII characters.")]
     #[diagnostic(code(wwsvc_rs::error::WWSVCError::HeaderValueToStrError))]

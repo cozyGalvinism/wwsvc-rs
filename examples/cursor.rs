@@ -33,7 +33,8 @@ async fn main() {
         .secret(&secret)
         .revision(revision)
         .credentials(credentials)
-        .build();
+        .build()
+        .expect("failed to build client");
 
     let registered_client = client.register().await.expect("failed to register");
     let client_arc = Arc::new(registered_client);
@@ -67,7 +68,7 @@ async fn main() {
 
     // Example 2: Collect all items
     println!("\n=== Collect all items (50 items per page) ===");
-    let mut cursor = client_arc
+    let cursor = client_arc
         .cursored_request::<ArticleData, ArtikelGetResponse<ArticleData>>(
             Method::PUT,
             "ARTIKEL.GET",

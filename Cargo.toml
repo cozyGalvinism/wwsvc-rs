@@ -3,12 +3,12 @@ members = ["wwsvc-rs-derive"]
 resolver = "2"
 
 [workspace.package]
-version = "4.2.0"
+version = "5.0.0"
 authors = ["cozyGalvinsim <jean@der-capta.in>"]
 license = "MIT"
 repository = "https://github.com/cozyGalvinism/wwsvc-rs"
 edition = "2021"
-rust-version = "1.74.0"
+rust-version = "1.85.0"
 
 [package]
 name = "wwsvc-rs"
@@ -19,7 +19,7 @@ repository = { workspace = true }
 edition = { workspace = true }
 rust-version.workspace = true
 description = "A web client which is used to consume SoftENGINE's WEBSERVICES, a proprietary API for their software WEBWARE."
-include = ["src/**/*", "Cargo.toml"]
+include = ["src/**/*", "Cargo.toml", "README.md", "CHANGELOG.md"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -38,9 +38,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 miette = "7.1"
-typed-builder = "0.23"
 url = "2.5"
-wwsvc-rs-derive = { path = "./wwsvc-rs-derive", optional = true, version = "4.2.0" }
+wwsvc-rs-derive = { path = "./wwsvc-rs-derive", optional = true, version = "5.0.0" }
 async-trait = { version = "0.1", optional = true }
 futures = "0.3"
 tokio = { version = "1.48", features = ["sync"] }
@@ -51,6 +50,8 @@ default = ["native-tls"]
 derive = ["dep:wwsvc-rs-derive", "dep:async-trait"]
 rustls = ["reqwest/rustls"]
 native-tls = ["reqwest/native-tls"]
+# Ready-made response types for SoftENGINE's standard WEBWARE GET functions.
+builtin-responses = []
 
 [dev-dependencies]
 dotenvy = "0.15"

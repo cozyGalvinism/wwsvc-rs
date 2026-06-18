@@ -28,7 +28,8 @@ async fn test_articles() {
             std::env::var("APP_ID").unwrap().as_str(),
         ))
         .allow_insecure(true)
-        .build();
+        .build()
+        .expect("failed to build client");
     let registered_client = client.register().await.unwrap();
 
     let articles = registered_client

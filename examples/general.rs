@@ -57,7 +57,8 @@ async fn main() {
         .app_hash(&app_hash)
         .secret(&secret)
         .revision(revision)
-        .build();
+        .build()
+        .expect("failed to build client");
 
     let registered_client = client.register().await.expect("failed to register");
 

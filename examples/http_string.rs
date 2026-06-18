@@ -21,7 +21,8 @@ async fn main() {
         .secret(&secret)
         .revision(revision)
         .credentials(Credentials::new(&service_pass, &app_id))
-        .build();
+        .build()
+        .expect("failed to build client");
 
     let registered_client = client.register().await.expect("failed to register");
 

@@ -25,7 +25,8 @@ async fn test_articles() {
         .revision(std::env::var("REVISION").unwrap().parse().unwrap())
         .credentials(Credentials::new(std::env::var("SERVICE_PASS").unwrap().as_str(), std::env::var("APP_ID").unwrap().as_str()))
         .allow_insecure(true)
-        .build();
+        .build()
+        .expect("failed to build client");
 
     let registered_client = client.register().await.unwrap();
 
@@ -66,7 +67,8 @@ async fn test_articles_cursored() {
         .revision(std::env::var("REVISION").unwrap().parse().unwrap())
         .credentials(Credentials::new(std::env::var("SERVICE_PASS").unwrap().as_str(), std::env::var("APP_ID").unwrap().as_str()))
         .allow_insecure(true)
-        .build();
+        .build()
+        .expect("failed to build client");
 
     let registered_client = client.register().await.unwrap();
     let cursored = ArticleData::get_cursored(Arc::new(registered_client), Parameters::default(), 10).await;
