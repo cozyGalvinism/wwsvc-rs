@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use wwsvc_rs::{collection, WWSVCGetData, WebwareClient};
+use wwsvc_rs::{Parameters, WWSVCGetData, WebwareClient};
 
 #[derive(WWSVCGetData, Debug, Deserialize, Clone)]
 #[wwsvc(function = "ARTIKEL")]
@@ -27,9 +27,9 @@ async fn main() {
         .revision(revision)
         .build();
 
-    let mut registered_client = client.register().await.expect("failed to register");
+    let registered_client = client.register().await.expect("failed to register");
 
-    let articles = ArticleData::get(&mut registered_client, collection! {})
+    let articles = ArticleData::get(&registered_client, Parameters::new())
         .await
         .unwrap();
 

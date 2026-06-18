@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use serde::{Deserialize, Serialize};
 
-use crate::WWSVCError;
+use crate::{WWSVCError, params::Parameters};
 
 /// Trait for converting a `reqwest::Request` to a HTTP string.
 pub trait RequestToHttpString {
@@ -138,6 +138,18 @@ impl ToServiceFunctionParameters for HashMap<&str, &str> {
             .map(|(name, content)| ServiceFunctionParameter {
                 name: name.to_string(),
                 content: content.to_string(),
+            })
+            .collect()
+    }
+}
+
+impl ToServiceFunctionParameters for Parameters {
+    /// Converts the `Parameters` to a vector of `ServiceFunctionParameter`.
+    fn to_service_function_parameters(&self) -> Vec<ServiceFunctionParameter> {
+        self.as_inner().iter()
+            .map(|(name, content): (&String, &String)| ServiceFunctionParameter {
+                name: name.clone(),
+                content: content.clone(),
             })
             .collect()
     }

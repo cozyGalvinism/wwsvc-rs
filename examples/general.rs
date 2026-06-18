@@ -1,16 +1,14 @@
 use reqwest::Method;
 use serde::Deserialize;
-use wwsvc_rs::{collection, generate_get_response, Registered, WebwareClient};
+use wwsvc_rs::{generate_get_response, Parameters, Registered, WebwareClient};
 
-async fn get_json_value(client: &mut WebwareClient<Registered>) {
+async fn get_json_value(client: &WebwareClient<Registered>) {
     let json_value = client
         .request(
             Method::PUT,
             "ARTIKEL.GET",
             1,
-            collection! {
-                "FELDER" => "ART_1_25",
-            },
+            Parameters::new().param("FELDER", "ART_1_25"),
             None,
         )
         .await
@@ -27,21 +25,19 @@ pub struct ArticleData {
 
 generate_get_response!(Articles, "ARTIKELLISTE", ArticleList, "ARTIKEL");
 
-async fn get_deserialized_value(client: &mut WebwareClient<Registered>) {
+async fn get_deserialized_value(client: &WebwareClient<Registered>) {
     let articles = client
         .request_generic::<Articles<ArticleData>>(
             Method::PUT,
             "ARTIKEL.GET",
             1,
-            collection! {
-                "FELDER" => "ART_1_25",
-            },
+            Parameters::new().param("FELDER", "ART_1_25"),
             None,
         )
         .await
         .unwrap();
 
-    println!("{:#?}", articles.container.list);
+    println!("{:#?}", articles.container.unwrap().list);
 }
 
 #[tokio::main]
@@ -63,10 +59,10 @@ async fn main() {
         .revision(revision)
         .build();
 
-    let mut registered_client = client.register().await.expect("failed to register");
+    let registered_client = client.register().await.expect("failed to register");
 
-    get_json_value(&mut registered_client).await;
-    get_deserialized_value(&mut registered_client).await;
+    get_json_value(&registered_client).await;
+    get_deserialized_value(&registered_client).await;
 
     registered_client
         .deregister()
